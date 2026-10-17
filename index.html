@@ -1,0 +1,600 @@
+<!doctype html>
+<html lang="uk">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Пʼятниця 5×5</title>
+<style>
+:root{color-scheme:light;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
+body{margin:0}
+[hidden]{display:none!important}
+</style>
+<style id="css">
+@import url("https://fonts.googleapis.com/css2?family=Oswald:wght@500;600;700&family=Golos+Text:wght@400;500;600;700&display=swap");
+/* Layout: scoreboard strip on top, season chips + tabs, one working panel below; phone-first single column */
+:root{
+  --bg:#EDF1F6; --surface:#FFFFFF; --sunk:#F5F7FA; --ink:#15213A; --muted:#5D6A80; --line:#D6DDE7;
+  --yel:#E2AA12; --yel-ink:#6B4E00; --yel-soft:#FBF0CC;
+  --blu:#2F72D0; --blu-ink:#123E7A; --blu-soft:#DCE8FA;
+  --win:#21915A; --loss:#CF4239; --draw:#98A2B2;
+  --btn:#15213A; --btn-ink:#FFFFFF;
+  --f-display:"Oswald","Arial Narrow",Impact,sans-serif;
+  --f-body:"Golos Text",system-ui,-apple-system,"Segoe UI",sans-serif;
+  --r:10px;
+}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
+  --bg:#0E1524; --surface:#162036; --sunk:#111A2C; --ink:#E7ECF4; --muted:#93A0B6; --line:#26324B;
+  --yel:#F0C238; --yel-ink:#F6D879; --yel-soft:#3A3014;
+  --blu:#5F9BEE; --blu-ink:#A9C8F7; --blu-soft:#172A4C;
+  --win:#3FBF7F; --loss:#F06A60; --draw:#6E7A8E;
+  --btn:#E7ECF4; --btn-ink:#0E1524; color-scheme:dark;
+}}
+:root[data-theme="dark"]{
+  --bg:#0E1524; --surface:#162036; --sunk:#111A2C; --ink:#E7ECF4; --muted:#93A0B6; --line:#26324B;
+  --yel:#F0C238; --yel-ink:#F6D879; --yel-soft:#3A3014;
+  --blu:#5F9BEE; --blu-ink:#A9C8F7; --blu-soft:#172A4C;
+  --win:#3FBF7F; --loss:#F06A60; --draw:#6E7A8E;
+  --btn:#E7ECF4; --btn-ink:#0E1524; color-scheme:dark;
+}
+*{box-sizing:border-box}
+body{background:var(--bg);color:var(--ink);font-family:var(--f-body);font-size:15px;line-height:1.45}
+.wrap{max-width:980px;margin:0 auto;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));padding-block:20px 48px;display:flex;flex-direction:column;gap:16px}
+button,input{font:inherit;color:inherit}
+button{cursor:pointer}
+:focus-visible{outline:2px solid var(--blu);outline-offset:2px}
+.num{font-variant-numeric:tabular-nums}
+
+.top{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap}
+.brand{font-family:var(--f-display);font-weight:700;font-size:28px;letter-spacing:.01em;line-height:1;text-transform:uppercase;display:flex;align-items:center;gap:10px}
+.brand .dot{display:inline-flex;width:22px;height:22px;border-radius:50%;background:linear-gradient(90deg,var(--yel) 50%,var(--blu) 50%)}
+.btn{border:0;border-radius:999px;padding:9px 16px;font-weight:600;background:var(--btn);color:var(--btn-ink)}
+.btn.ghost{background:transparent;color:var(--ink);border:1px solid var(--line)}
+.btn.small{padding:6px 12px;font-size:13px}
+.btn.danger{background:var(--loss);color:#fff}
+.btn:disabled{opacity:.5;cursor:default}
+
+/* scoreboard */
+.board{background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:16px;display:grid;grid-template-columns:1fr auto 1fr;gap:12px;align-items:center}
+.side{display:flex;flex-direction:column;gap:2px}
+.side.b{align-items:flex-end;text-align:right}
+.side .lbl{font-size:12px;text-transform:uppercase;letter-spacing:.08em;font-weight:600}
+.side.y .lbl{color:var(--yel-ink)} .side.b .lbl{color:var(--blu-ink)}
+.side .big{font-family:var(--f-display);font-size:52px;font-weight:600;line-height:1}
+.side.y .big{color:var(--yel)} .side.b .big{color:var(--blu)}
+.mid{text-align:center;color:var(--muted);font-size:13px}
+.mid b{display:block;font-family:var(--f-display);font-size:22px;color:var(--ink);font-weight:500}
+.bar{grid-column:1/-1;display:flex;height:8px;border-radius:99px;overflow:hidden;background:var(--sunk)}
+.bar i{display:block;height:100%}
+.facts{grid-column:1/-1;display:flex;flex-wrap:wrap;gap:6px 20px;color:var(--muted);font-size:13px;border-top:1px solid var(--line);padding-top:10px}
+.facts b{color:var(--ink);font-weight:600}
+
+.row{display:flex;gap:8px;flex-wrap:wrap;align-items:center;justify-content:space-between}
+.chips{display:flex;gap:6px;flex-wrap:wrap}
+.chip{border:1px solid var(--line);background:var(--surface);border-radius:999px;padding:5px 12px;font-size:13px;font-weight:500}
+.chip[aria-pressed="true"]{background:var(--btn);color:var(--btn-ink);border-color:var(--btn)}
+.tabs{display:flex;gap:2px;border-bottom:1px solid var(--line);overflow-x:auto}
+.tab{background:none;border:0;padding:10px 14px;font-weight:600;color:var(--muted);border-bottom:2px solid transparent;margin-bottom:-1px;white-space:nowrap}
+.tab[aria-selected="true"]{color:var(--ink);border-bottom-color:var(--ink)}
+
+.panel{background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:4px 0}
+.panel.pad{padding:16px}
+.h{font-family:var(--f-display);font-weight:500;font-size:18px;text-transform:uppercase;letter-spacing:.03em;margin:0}
+.sub{color:var(--muted);font-size:13px;margin:2px 0 0}
+.empty{padding:28px 16px;text-align:center;color:var(--muted)}
+
+/* rating table */
+.tbl-wrap{overflow-x:auto}
+table{border-collapse:collapse;width:100%;font-variant-numeric:tabular-nums}
+th,td{padding:9px 8px;text-align:right;white-space:nowrap}
+th{font-size:11px;text-transform:uppercase;letter-spacing:.07em;color:var(--muted);font-weight:600;border-bottom:1px solid var(--line)}
+th button{background:none;border:0;padding:0;font:inherit;color:inherit;text-transform:inherit;letter-spacing:inherit}
+th.on{color:var(--ink)}
+td{border-bottom:1px solid var(--line)}
+tr:last-child td{border-bottom:0}
+th:first-child,td:first-child{padding-left:16px;text-align:left;color:var(--muted);width:28px}
+th:nth-child(2),td:nth-child(2){text-align:left}
+th:last-child,td:last-child{padding-right:16px}
+td.name{font-weight:600;position:sticky;left:0}
+tr.p{cursor:pointer}
+tr.p:hover td{background:var(--sunk)}
+tr.low td{color:var(--muted)}
+tr.low td.name{font-weight:500}
+tr.sep td{background:var(--sunk);font-size:11px;text-transform:uppercase;letter-spacing:.07em;color:var(--muted);text-align:left;padding:6px 16px}
+.pct{display:inline-flex;align-items:center;gap:6px}
+.pct i{display:inline-block;width:38px;height:5px;border-radius:9px;background:var(--sunk);position:relative;overflow:hidden}
+.pct i s{position:absolute;inset:0 auto 0 0;background:var(--win);text-decoration:none}
+.form{display:inline-flex;gap:3px}
+.form span{width:9px;height:9px;border-radius:50%;display:inline-block}
+.w{background:var(--win)} .l{background:var(--loss)} .d{background:var(--draw)}
+.pos{color:var(--win)} .neg{color:var(--loss)}
+tr.det td{background:var(--sunk);white-space:normal;text-align:left;color:var(--ink);padding:14px 16px}
+.det-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:16px}
+.det-grid h4{margin:0 0 6px;font-size:11px;text-transform:uppercase;letter-spacing:.08em;color:var(--muted)}
+.mate{display:flex;justify-content:space-between;gap:8px;font-size:14px;padding:2px 0}
+.mate span:last-child{color:var(--muted)}
+.months{display:flex;gap:4px;align-items:flex-end;height:54px}
+.months div{flex:1;display:flex;flex-direction:column;align-items:center;gap:3px;font-size:10px;color:var(--muted)}
+.months i{display:block;width:100%;max-width:18px;background:var(--blu);border-radius:3px 3px 0 0;min-height:2px}
+.seq{display:flex;gap:3px;flex-wrap:wrap}
+.seq span{width:14px;height:14px;border-radius:3px}
+
+.pairs{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:0 24px;padding:4px 16px 12px}
+.pair{display:flex;justify-content:space-between;gap:10px;padding:8px 0;border-bottom:1px solid var(--line);font-size:14px}
+.pair b{font-weight:600}
+
+/* matches */
+.match{display:grid;grid-template-columns:64px 1fr auto 1fr auto;gap:10px;align-items:center;padding:12px 16px;border-bottom:1px solid var(--line)}
+.match:last-child{border-bottom:0}
+.match .date{font-size:13px;color:var(--muted);line-height:1.2}
+.match .date b{display:block;font-family:var(--f-display);font-size:20px;color:var(--ink);font-weight:500}
+.team{display:flex;flex-wrap:wrap;gap:4px;min-width:0}
+.team.b{justify-content:flex-end}
+.tag{font-size:12px;padding:2px 8px;border-radius:99px;font-weight:500}
+.team.y .tag{background:var(--yel-soft);color:var(--yel-ink)}
+.team.b .tag{background:var(--blu-soft);color:var(--blu-ink)}
+.score{font-family:var(--f-display);font-size:26px;font-weight:600;white-space:nowrap;text-align:center;min-width:84px}
+.score .ys{color:var(--yel)} .score .bs{color:var(--blu)} .score .lose{opacity:.45}
+.score small{display:block;font-family:var(--f-body);font-size:11px;color:var(--muted);font-weight:500}
+.edit{background:none;border:0;color:var(--muted);font-size:13px;padding:4px}
+@media (max-width:640px){
+  .match{grid-template-columns:1fr auto;grid-template-areas:"date edit" "y y" "score score" "b b"}
+  .match .date{grid-area:date;display:flex;gap:8px;align-items:baseline}
+  .match .date b{display:inline}
+  .match .edit{grid-area:edit}
+  .team.y{grid-area:y} .team.b{grid-area:b;justify-content:flex-start}
+  .score{grid-area:score;text-align:left}
+  .side .big{font-size:42px}
+}
+
+/* generator */
+.pick{display:flex;flex-wrap:wrap;gap:6px}
+.pick button{border:1px solid var(--line);background:var(--surface);border-radius:8px;padding:7px 11px;font-size:14px}
+.pick button[aria-pressed="true"]{background:var(--ink);color:var(--bg);border-color:var(--ink)}
+.stepper{display:inline-flex;align-items:center;border:1px solid var(--line);border-radius:8px;overflow:hidden}
+.stepper button{border:0;background:var(--sunk);width:32px;height:32px;font-size:18px}
+.stepper span{min-width:32px;text-align:center;font-weight:600}
+.split{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+.tcard{border-radius:12px;padding:12px 14px;display:flex;flex-direction:column;gap:6px}
+.tcard.y{background:var(--yel-soft);color:var(--yel-ink)}
+.tcard.b{background:var(--blu-soft);color:var(--blu-ink)}
+.tcard h3{margin:0;font-family:var(--f-display);font-weight:600;text-transform:uppercase;font-size:18px;display:flex;justify-content:space-between}
+.tcard ul{margin:0;padding:0;list-style:none;font-weight:600;color:var(--ink)}
+.tcard li{padding:2px 0}
+.stack{display:flex;flex-direction:column;gap:14px}
+
+/* players admin */
+.prow{display:flex;gap:10px;align-items:center;padding:8px 16px;border-bottom:1px solid var(--line)}
+.prow input[type=text]{flex:1;min-width:0;border:1px solid var(--line);background:var(--sunk);border-radius:8px;padding:7px 10px}
+.prow .g{color:var(--muted);font-size:13px;width:64px;text-align:right}
+.prow.off input[type=text]{opacity:.55}
+.switch{font-size:13px;display:flex;gap:6px;align-items:center;color:var(--muted);white-space:nowrap}
+
+/* sheet */
+.overlay{position:fixed;inset:0;background:rgba(10,16,30,.5);display:flex;align-items:flex-end;justify-content:center;z-index:20;padding-top:env(safe-area-inset-top,0px)}
+.sheet{background:var(--surface);width:100%;max-width:620px;max-height:92%;overflow:auto;border-radius:16px 16px 0 0;padding:18px max(16px,env(safe-area-inset-right,0px)) calc(18px + env(safe-area-inset-bottom,0px)) max(16px,env(safe-area-inset-left,0px));display:flex;flex-direction:column;gap:14px}
+@media (min-width:700px){.overlay{align-items:center}.sheet{border-radius:16px}}
+.field{display:flex;flex-direction:column;gap:4px;font-size:13px;color:var(--muted);font-weight:500}
+.field input{border:1px solid var(--line);background:var(--sunk);border-radius:8px;padding:8px 10px;font-size:15px;color:var(--ink)}
+.scorein{display:grid;grid-template-columns:1fr auto 1fr;gap:10px;align-items:end}
+.scorein input{font-family:var(--f-display);font-size:28px;text-align:center;padding:6px}
+.scorein .y input{border-color:var(--yel)} .scorein .b input{border-color:var(--blu)}
+.scorein .colon{font-family:var(--f-display);font-size:28px;padding-bottom:8px}
+.assign{display:flex;flex-direction:column}
+.arow{display:flex;justify-content:space-between;align-items:center;padding:5px 0;border-bottom:1px solid var(--line);gap:8px}
+.seg{display:inline-flex;border:1px solid var(--line);border-radius:8px;overflow:hidden;flex:none}
+.seg button{border:0;background:var(--surface);padding:6px 12px;font-size:13px;font-weight:600;color:var(--muted)}
+.seg button+button{border-left:1px solid var(--line)}
+.seg button.on-n{background:var(--sunk);color:var(--ink)}
+.seg button.on-y{background:var(--yel);color:#2A1E00}
+.seg button.on-b{background:var(--blu);color:#fff}
+.counts{display:flex;gap:16px;font-size:13px;color:var(--muted);flex-wrap:wrap}
+.counts b.y{color:var(--yel-ink)} .counts b.b{color:var(--blu-ink)}
+.actions{display:flex;gap:8px;justify-content:space-between;flex-wrap:wrap}
+.actions div{display:flex;gap:8px}
+.inline-add{display:flex;gap:8px}
+.inline-add input{flex:1;min-width:0;border:1px solid var(--line);background:var(--sunk);border-radius:8px;padding:7px 10px}
+.toast{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(20px + env(safe-area-inset-bottom,0px));background:var(--btn);color:var(--btn-ink);padding:10px 16px;border-radius:10px;font-size:14px;z-index:30;max-width:calc(100% - 32px)}
+.note{font-size:13px;color:var(--muted)}
+@media (prefers-reduced-motion:no-preference){.sheet{animation:up .18s ease-out}@keyframes up{from{transform:translateY(16px);opacity:.6}}}
+.foot{display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap;color:var(--muted);font-size:13px;padding-top:8px}
+.foot button{background:none;border:0;color:var(--muted);text-decoration:underline;padding:0;font-size:13px}
+.loading{padding:48px 16px;text-align:center;color:var(--muted)}
+</style>
+</head>
+<body>
+<div id="app"><p class="loading">Завантажую статистику…</p></div>
+<script id="code">
+(function(){
+"use strict";
+/* Дані лежать у data.json поруч зі сторінкою. Редагування: GitHub-токен зберігається лише в цьому браузері. */
+var S = {v:1,players:[],games:[]};
+var MON = ["січ","лют","бер","кві","тра","чер","лип","сер","вер","жов","лис","гру"];
+var ui = {season:null, tab:"rating", sort:{k:"pct",d:-1}, open:null, gen:{sel:[],guests:0,pick:0,res:null}, form:null, players:null, login:null};
+var editor=false, busy=false, toastT=null, sha=null, loaded=false;
+var app=document.getElementById("app");
+var LS="futbol55";
+function cfgGet(){try{return JSON.parse(localStorage.getItem(LS))||{};}catch(e){return {};}}
+function cfgSet(c){try{if(c)localStorage.setItem(LS,JSON.stringify(c));else localStorage.removeItem(LS);}catch(e){}}
+function guessRepo(){
+  var h=location.hostname, m=h.match(/^([^.]+)\.github\.io$/i);
+  if(!m)return {owner:"",repo:""};
+  var seg=location.pathname.split("/").filter(Boolean)[0];
+  return {owner:m[1],repo:seg||(m[1]+".github.io")};
+}
+function b64enc(s){return btoa(unescape(encodeURIComponent(s)));}
+function b64dec(s){return decodeURIComponent(escape(atob(s.replace(/\s/g,""))));}
+function gh(c,path,opt){
+  opt=opt||{};
+  return fetch("https://api.github.com/repos/"+encodeURIComponent(c.owner)+"/"+encodeURIComponent(c.repo)+path,{
+    method:opt.method||"GET",cache:"no-store",
+    headers:{"Authorization":"Bearer "+c.token,"Accept":"application/vnd.github+json","X-GitHub-Api-Version":"2022-11-28"},
+    body:opt.body?JSON.stringify(opt.body):undefined
+  });
+}
+function ghError(r){
+  if(r.status===401)return "Токен недійсний або прострочений. Увійдіть заново з новим токеном.";
+  if(r.status===403)return "Токен не має права запису. Потрібен доступ Contents: Read and write.";
+  if(r.status===404)return "Репозиторій або data.json не знайдено. Перевірте власника й назву репозиторію.";
+  if(r.status===409||r.status===422)return "Файл щойно змінився в іншому місці. Оновіть сторінку й повторіть.";
+  return "GitHub відповів помилкою "+r.status+". Спробуйте ще раз.";
+}
+function normalize(d){if(!d||!Array.isArray(d.players)||!Array.isArray(d.games))throw new Error("bad");return d;}
+function loadPublic(){
+  return fetch("data.json?t="+Date.now(),{cache:"no-store"}).then(function(r){if(!r.ok)throw new Error("http "+r.status);return r.json();}).then(normalize);
+}
+function loadEditor(c){
+  return gh(c,"/contents/data.json").then(function(r){
+    if(!r.ok){var err=new Error(ghError(r));err.status=r.status;throw err;}
+    return r.json();
+  }).then(function(j){sha=j.sha; return normalize(JSON.parse(b64dec(j.content)));});
+}
+
+function esc(s){return String(s).replace(/[&<>"']/g,function(c){return {"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c];});}
+function pmap(){var m={};S.players.forEach(function(p){m[p.id]=p;});return m;}
+function pname(id){var p=pmap()[id];return p?p.name:"?";}
+function played(g){return g.sy!=null&&g.sb!=null&&g.sy!==""&&g.sb!=="";}
+function years(){var y={};S.games.forEach(function(g){y[g.date.slice(0,4)]=1;});return Object.keys(y).sort();}
+function curSeason(){var ys=years(); if(ui.season&&(ui.season==="all"||ys.indexOf(ui.season)>=0))return ui.season; return ys.length?ys[ys.length-1]:"all";}
+function inSeason(g){var s=curSeason();return s==="all"||g.date.slice(0,4)===s;}
+function sortedGames(list){return list.slice().sort(function(a,b){return a.date<b.date?-1:a.date>b.date?1:0;});}
+function fmtDate(d){var p=d.split("-");return {day:+p[2],mon:MON[+p[1]-1],year:p[0]};}
+function pctS(x){return Math.round(x*100)+"%";}
+function sgn(x){var v=Math.round(x*10)/10;return (v>0?"+":"")+v.toFixed(1);}
+
+function stats(games){
+  var st={}, pairs={};
+  function P(id){return st[id]||(st[id]={id:id,g:0,w:0,d:0,l:0,gf:0,ga:0,seq:[],months:{}});}
+  games.forEach(function(g){
+    [["y",+g.sy,+g.sb],["b",+g.sb,+g.sy]].forEach(function(t){
+      var ids=g[t[0]]||[], my=t[1], op=t[2], r=my>op?"w":my<op?"l":"d";
+      ids.forEach(function(id){var p=P(id);p.g++;p[r]++;p.gf+=my;p.ga+=op;p.seq.push(r);var m=g.date.slice(0,7);p.months[m]=(p.months[m]||0)+1;});
+      for(var i=0;i<ids.length;i++)for(var j=i+1;j<ids.length;j++){
+        var k=[ids[i],ids[j]].sort().join("|"); var q=pairs[k]||(pairs[k]={a:k.split("|")[0],b:k.split("|")[1],g:0,w:0,d:0});
+        q.g++; if(r==="w")q.w++; if(r==="d")q.d++;
+      }
+    });
+  });
+  Object.keys(st).forEach(function(id){
+    var p=st[id]; p.pct=p.w/p.g; p.gd=(p.gf-p.ga)/p.g; p.att=games.length?p.g/games.length:0;
+    var best=0,run=0; p.seq.forEach(function(r){run=r==="w"?run+1:0; if(run>best)best=run;}); p.bestStreak=best;
+    var cur=0,last=p.seq[p.seq.length-1]; for(var i=p.seq.length-1;i>=0&&p.seq[i]===last;i--)cur++; p.cur={r:last,n:cur};
+  });
+  return {players:st,pairs:pairs};
+}
+
+/* ---------- saving ---------- */
+function toast(msg){
+  var t=document.querySelector(".toast"); if(!t){t=document.createElement("div");t.className="toast";t.setAttribute("role","status");document.body.appendChild(t);}
+  t.textContent=msg; t.hidden=false; clearTimeout(toastT); toastT=setTimeout(function(){t.hidden=true;},3200);
+}
+function save(next,okMsg,commitMsg){
+  if(busy)return;
+  var c=cfgGet(); if(!c.token){editor=false;render();toast("Увійдіть як редактор, щоб зберігати");return;}
+  busy=true; render();
+  var body={message:commitMsg||okMsg||"Оновлення статистики",content:b64enc(JSON.stringify(next,null,1)+"\n"),sha:sha};
+  gh(c,"/contents/data.json",{method:"PUT",body:body}).then(function(r){
+    if(!r.ok){return r.text().then(function(){throw new Error(ghError(r));});}
+    return r.json();
+  }).then(function(j){
+    sha=j.content&&j.content.sha; S=next; busy=false; ui.form=null; ui.players=null; render();
+    toast((okMsg||"Збережено")+". Сайт для всіх оновиться за 1–2 хв");
+  }).catch(function(e){busy=false; render(); toast(e.message&&e.message.length>8?e.message:"Немає звʼязку з GitHub. Спробуйте ще раз");});
+}
+
+/* ---------- views ---------- */
+function board(games){
+  var y=0,b=0,d=0,goals=0; games.forEach(function(g){var a=+g.sy,c=+g.sb;goals+=a+c;if(a>c)y++;else if(c>a)b++;else d++;});
+  var n=games.length, last=games[games.length-1];
+  var st=stats(games).players, top=null; Object.keys(st).forEach(function(id){if(!top||st[id].g>st[top].g)top=id;});
+  var lastTxt=last?(function(){var f=fmtDate(last.date);return f.day+" "+f.mon+" · "+last.sy+":"+last.sb;})():"—";
+  return '<section class="board" aria-label="Підсумок сезону">'+
+    '<div class="side y"><span class="lbl">Жовті</span><span class="big num">'+y+'</span></div>'+
+    '<div class="mid"><b class="num">'+d+'</b>нічиїх</div>'+
+    '<div class="side b"><span class="lbl">Сині</span><span class="big num">'+b+'</span></div>'+
+    '<div class="bar" aria-hidden="true"><i style="width:'+(n?y/n*100:0)+'%;background:var(--yel)"></i><i style="width:'+(n?d/n*100:0)+'%;background:var(--draw)"></i><i style="width:'+(n?b/n*100:0)+'%;background:var(--blu)"></i></div>'+
+    '<div class="facts"><span>Ігор: <b class="num">'+n+'</b></span><span>Голів за гру: <b class="num">'+(n?(goals/n).toFixed(1):"—")+'</b></span>'+
+    '<span>Найчастіше грав: <b>'+(top?esc(pname(top))+" ("+st[top].g+")":"—")+'</b></span><span>Остання гра: <b class="num">'+lastTxt+'</b></span></div>'+
+  '</section>';
+}
+
+function ratingView(games){
+  if(!games.length)return '<div class="panel"><p class="empty">У цьому сезоні ще немає зіграних матчів.</p></div>';
+  var data=stats(games), st=data.players, k=ui.sort.k, d=ui.sort.d;
+  var minG=Math.max(3,Math.round(games.length*0.2));
+  var rows=Object.keys(st).map(function(id){return st[id];});
+  var val=function(p){return k==="name"?pname(p.id):k==="pts"?p.w*3+p.d:p[k];};
+  rows.sort(function(a,b){var x=val(a),y=val(b); if(typeof x==="string")return d*x.localeCompare(y,"uk"); return d*(x-y)||(b.g-a.g);});
+  var gated=(k==="pct"||k==="gd");
+  var main=gated?rows.filter(function(p){return p.g>=minG;}):rows, low=gated?rows.filter(function(p){return p.g<minG;}):[];
+  function th(key,label,title){return '<th class="'+(k===key?"on":"")+'"><button data-sort="'+key+'" title="'+title+'">'+label+(k===key?(d<0?" ↓":" ↑"):"")+'</button></th>';}
+  function row(p,i,isLow){
+    var form=p.seq.slice(-5).map(function(r){return '<span class="'+r+'" title="'+(r==="w"?"Перемога":r==="l"?"Поразка":"Нічия")+'"></span>';}).join("");
+    var h='<tr class="p'+(isLow?" low":"")+'" data-open="'+p.id+'" tabindex="0" aria-expanded="'+(ui.open===p.id)+'"><td>'+(isLow?"·":i+1)+'</td><td class="name">'+esc(pname(p.id))+'</td>'+
+      '<td>'+p.g+'</td><td>'+p.w+'–'+p.d+'–'+p.l+'</td><td>'+(p.w*3+p.d)+'</td>'+
+      '<td><span class="pct"><i><s style="width:'+(p.pct*100)+'%"></s></i>'+pctS(p.pct)+'</span></td>'+
+      '<td class="'+(p.gd>0.05?"pos":p.gd<-0.05?"neg":"")+'">'+sgn(p.gd)+'</td><td><span class="form">'+form+'</span></td><td>'+pctS(p.att)+'</td></tr>';
+    if(ui.open===p.id)h+='<tr class="det"><td colspan="9">'+detail(p,data,games)+'</td></tr>';
+    return h;
+  }
+  var body=main.map(function(p,i){return row(p,i,false);}).join("");
+  if(low.length)body+='<tr class="sep"><td colspan="9">Менше '+minG+' ігор: у рейтингу % не враховуються</td></tr>'+low.map(function(p,i){return row(p,i,true);}).join("");
+  return '<div class="panel"><div class="tbl-wrap"><table><thead><tr><th>#</th>'+th("name","Гравець","За імʼям")+th("g","І","Ігор")+'<th title="Перемоги–нічиї–поразки">В–Н–П</th>'+th("pts","Оч","3 за перемогу, 1 за нічию")+th("pct","%В","Відсоток перемог")+th("gd","+/−","Різниця мʼячів команди за гру")+'<th>Форма</th>'+th("att","Відв.","Відвідуваність сезону")+'</tr></thead><tbody>'+body+'</tbody></table></div></div>'+
+    pairsView(data);
+}
+
+function detail(p,data,games){
+  var mates=[]; Object.keys(data.pairs).forEach(function(k){var q=data.pairs[k]; if(q.g>=3&&(q.a===p.id||q.b===p.id))mates.push({id:q.a===p.id?q.b:q.a,g:q.g,w:q.w,pct:q.w/q.g});});
+  mates.sort(function(a,b){return b.pct-a.pct||b.g-a.g;});
+  var best=mates.slice(0,3), worst=mates.slice(-3).reverse().filter(function(m){return best.indexOf(m)<0;});
+  function ml(list){return list.length?list.map(function(m){return '<div class="mate"><span>'+esc(pname(m.id))+'</span><span>'+m.w+' з '+m.g+' · '+pctS(m.pct)+'</span></div>';}).join(""):'<div class="note">Замало спільних ігор</div>';}
+  var gm={}; games.forEach(function(g){var m=g.date.slice(0,7);gm[m]=(gm[m]||0)+1;});
+  var ms=Object.keys(gm).sort();
+  var bars=ms.map(function(m){var v=p.months[m]||0;return '<div title="'+v+' з '+gm[m]+'"><i style="height:'+Math.round(v/gm[m]*40)+'px"></i>'+MON[+m.slice(5)-1]+'</div>';}).join("");
+  var seq=p.seq.slice(-15).map(function(r){return '<span class="'+r+'"></span>';}).join("");
+  var cur=p.cur.n>1?(p.cur.r==="w"?p.cur.n+" перемог поспіль":p.cur.r==="l"?p.cur.n+" поразок поспіль":p.cur.n+" нічиїх поспіль"):"—";
+  return '<div class="det-grid">'+
+    '<div><h4>Найкраще разом</h4>'+ml(best)+'</div>'+
+    '<div><h4>Найгірше разом</h4>'+ml(worst)+'</div>'+
+    '<div><h4>Відвідуваність по місяцях</h4><div class="months">'+bars+'</div></div>'+
+    '<div><h4>Останні ігри</h4><div class="seq">'+seq+'</div><p class="note">Зараз: '+cur+' · Найдовша серія перемог: '+p.bestStreak+'</p></div>'+
+  '</div>';
+}
+
+function pairsView(data){
+  var list=Object.keys(data.pairs).map(function(k){return data.pairs[k];}).filter(function(q){return q.g>=4;});
+  if(!list.length)return "";
+  list.forEach(function(q){q.pct=q.w/q.g;});
+  var best=list.slice().sort(function(a,b){return b.pct-a.pct||b.g-a.g;}).slice(0,5);
+  var worst=list.slice().sort(function(a,b){return a.pct-b.pct||b.g-a.g;}).slice(0,5);
+  function li(q){return '<div class="pair"><span><b>'+esc(pname(q.a))+'</b> + <b>'+esc(pname(q.b))+'</b></span><span class="num">'+q.w+' з '+q.g+' · '+pctS(q.pct)+'</span></div>';}
+  return '<div class="panel"><div style="padding:14px 16px 4px"><h2 class="h">Звʼязки</h2><p class="sub">Пари в одній команді, від 4 спільних ігор</p></div>'+
+    '<div class="pairs"><div><p class="sub" style="margin:8px 0 0">Найчастіше виграють</p>'+best.map(li).join("")+'</div><div><p class="sub" style="margin:8px 0 0">Найчастіше програють</p>'+worst.map(li).join("")+'</div></div></div>';
+}
+
+function matchesView(){
+  var list=sortedGames(S.games.filter(inSeason)).reverse();
+  if(!list.length)return '<div class="panel"><p class="empty">Матчів ще немає.'+(editor?' Додайте перший кнопкою «+ Гра».':'')+'</p></div>';
+  return '<div class="panel">'+list.map(function(g){
+    var f=fmtDate(g.date), pl=played(g), y=+g.sy, b=+g.sb;
+    function tags(t,n){var a=(g[t]||[]).map(function(id){return '<span class="tag">'+esc(pname(id))+'</span>';});if(n)a.push('<span class="tag">+'+n+' гост'+(n===1?"ь":"і")+'</span>');return a.join("");}
+    var sc=pl?'<span class="ys'+(y<b?" lose":"")+'">'+y+'</span> : <span class="bs'+(b<y?" lose":"")+'">'+b+'</span><small>'+(y>b?"Перемогли жовті":b>y?"Перемогли сині":"Нічия")+'</small>':'<small>Без рахунку</small>';
+    return '<div class="match"><div class="date"><b class="num">'+f.day+'</b>'+f.mon+' '+f.year+'</div>'+
+      '<div class="team y">'+tags("y",g.gy)+'</div><div class="score num">'+sc+'</div><div class="team b">'+tags("b",g.gb)+'</div>'+
+      (editor?'<button class="edit" data-edit="'+g.id+'" aria-label="Редагувати матч">Змінити</button>':'<span></span>')+'</div>';
+  }).join("")+'</div>';
+}
+
+/* generator */
+function strengths(){
+  var st=stats(S.games.filter(played)).players, m={};
+  S.players.forEach(function(p){var s=st[p.id]; m[p.id]=s?((s.w+0.5*s.d+2.5)/(s.g+5)+0.02*((s.gf-s.ga)/(s.g+5))):0.5;});
+  return m;
+}
+function generate(){
+  var str=strengths(), units=ui.gen.sel.map(function(id){return {id:id,s:str[id]};});
+  for(var i=0;i<ui.gen.guests;i++)units.push({guest:true,s:0.45});
+  var n=units.length; if(n<2){ui.gen.res=null;return;}
+  var half=Math.floor(n/2), out=[];
+  (function rec(start,pick){
+    if(pick.length===half){
+      if(n%2===0&&pick[0]!==0)return;
+      var inA={};pick.forEach(function(i){inA[i]=1;});
+      var A=[],B=[];units.forEach(function(u,i){(inA[i]?A:B).push(u);});
+      var avg=function(t){return t.reduce(function(s,u){return s+u.s;},0)/t.length;};
+      var gA=A.filter(function(u){return u.guest;}).length,gB=B.length-B.filter(function(u){return !u.guest;}).length;
+      out.push({A:A,B:B,cost:Math.abs(avg(A)-avg(B))+(Math.abs(gA-gB)>1?0.05:0),sa:avg(A),sb:avg(B)}); return;
+    }
+    for(var i=start;i<n;i++){pick.push(i);rec(i+1,pick);pick.pop();}
+  })(0,[]);
+  out.sort(function(a,b){return a.cost-b.cost;});
+  ui.gen.res=out.slice(0,8); ui.gen.pick=0;
+}
+function genView(){
+  var act=S.players.filter(function(p){return p.active!==false;});
+  var sel=ui.gen.sel, r=ui.gen.res&&ui.gen.res[ui.gen.pick];
+  var picks=act.map(function(p){var on=sel.indexOf(p.id)>=0;return '<button data-gsel="'+p.id+'" aria-pressed="'+on+'">'+esc(p.name)+'</button>';}).join("");
+  var res="";
+  if(r){
+    var li=function(t){return t.map(function(u){return '<li>'+(u.guest?"Гість":esc(pname(u.id)))+'</li>';}).join("");};
+    res='<div class="split"><div class="tcard y"><h3><span>Жовті</span><span class="num">'+Math.round(r.sa*100)+'</span></h3><ul>'+li(r.A)+'</ul></div>'+
+        '<div class="tcard b"><h3><span>Сині</span><span class="num">'+Math.round(r.sb*100)+'</span></h3><ul>'+li(r.B)+'</ul></div></div>'+
+        '<p class="note">Число біля команди показує силу: середній відсоток перемог гравців за всі ігри, зважений на кількість ігор. Варіант '+(ui.gen.pick+1)+' з '+ui.gen.res.length+'.</p>'+
+        '<div class="row"><button class="btn ghost small" data-act="gen-next">Інший варіант</button>'+(editor?'<button class="btn small" data-act="gen-record">Записати як гру</button>':'')+'</div>';
+  }
+  return '<div class="panel pad stack"><div><h2 class="h">Хто прийшов</h2><p class="sub">Відмітьте гравців, і генератор поділить їх на дві рівні команди за статистикою</p></div>'+
+    '<div class="pick">'+picks+'</div>'+
+    '<div class="row"><span class="switch">Випадкові гості <span class="stepper"><button data-act="g-minus" aria-label="Менше гостей">−</button><span class="num">'+ui.gen.guests+'</span><button data-act="g-plus" aria-label="Більше гостей">+</button></span></span>'+
+    '<span class="row" style="justify-content:flex-end"><span class="note">Обрано: '+(sel.length+ui.gen.guests)+'</span><button class="btn ghost small" data-act="gen-clear">Скинути</button><button class="btn small" data-act="gen-run"'+(sel.length+ui.gen.guests<2?" disabled":"")+'>Поділити</button></span></div>'+
+    res+'</div>';
+}
+
+/* players admin */
+function playersView(){
+  if(!editor)return '<div class="panel"><p class="empty">Редагувати склад може лише власник сторінки.</p></div>';
+  var st=stats(S.games.filter(played)).players;
+  var list=ui.players||(ui.players=S.players.map(function(p){return {id:p.id,name:p.name,active:p.active!==false};}));
+  return '<div class="panel"><div style="padding:14px 16px"><h2 class="h">Склад</h2><p class="sub">Перейменування не змінює історію. Приховані гравці не показуються у формі гри й генераторі, але їхня статистика залишається.</p></div>'+
+    list.map(function(p,i){var g=st[p.id]?st[p.id].g:0;return '<div class="prow'+(p.active?"":" off")+'"><input type="text" id="pn-'+p.id+'" data-pname="'+i+'" value="'+esc(p.name)+'" aria-label="Імʼя гравця"><span class="g num">'+g+' ігор</span>'+
+      '<label class="switch"><input type="checkbox" id="pa-'+p.id+'" data-pact="'+i+'"'+(p.active?" checked":"")+'> грає</label>'+
+      (g===0&&!S.games.some(function(x){return (x.y||[]).concat(x.b||[]).indexOf(p.id)>=0;})?'<button class="edit" data-pdel="'+i+'">Видалити</button>':'')+'</div>';}).join("")+
+    '<div class="prow"><div class="inline-add" style="flex:1"><input type="text" id="new-player" placeholder="Новий гравець"><button class="btn ghost small" data-act="p-add">Додати</button></div></div>'+
+    '<div style="padding:12px 16px" class="row"><span class="note">'+(busy?"Зберігаю…":"")+'</span><button class="btn" data-act="p-save"'+(busy?" disabled":"")+'>Зберегти склад</button></div></div>';
+}
+
+/* game form */
+function nextFriday(){var d=new Date();while(d.getDay()!==5)d.setDate(d.getDate()+1);return d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0")+"-"+String(d.getDate()).padStart(2,"0");}
+function openForm(g,preset){
+  var a={}; if(g){(g.y||[]).forEach(function(id){a[id]="y";});(g.b||[]).forEach(function(id){a[id]="b";});}
+  if(preset){preset.A.forEach(function(u){if(!u.guest)a[u.id]="y";});preset.B.forEach(function(u){if(!u.guest)a[u.id]="b";});}
+  ui.form={id:g?g.id:null,date:g?g.date:nextFriday(),a:a,gy:g?(g.gy||0):(preset?preset.A.filter(function(u){return u.guest;}).length:0),gb:g?(g.gb||0):(preset?preset.B.filter(function(u){return u.guest;}).length:0),
+    sy:g&&g.sy!=null?String(g.sy):"",sb:g&&g.sb!=null?String(g.sb):"",extra:[],confirmDel:false};
+  render(); var el=document.getElementById("f-date"); if(el)el.focus();
+}
+function formView(){
+  var f=ui.form; if(!f)return "";
+  var all=S.players.concat(f.extra);
+  var shown=all.filter(function(p){return p.active!==false||f.a[p.id];});
+  var ny=0,nb=0; Object.keys(f.a).forEach(function(k){if(f.a[k]==="y")ny++;if(f.a[k]==="b")nb++;});
+  var rows=shown.map(function(p){var v=f.a[p.id]||"n";return '<div class="arow"><span>'+esc(p.name)+'</span><span class="seg" role="group" aria-label="'+esc(p.name)+'">'+
+    '<button data-as="'+p.id+'|n" class="'+(v==="n"?"on-n":"")+'">—</button><button data-as="'+p.id+'|y" class="'+(v==="y"?"on-y":"")+'">Жовті</button><button data-as="'+p.id+'|b" class="'+(v==="b"?"on-b":"")+'">Сині</button></span></div>';}).join("");
+  function step(t){return '<span class="stepper"><button data-act="fg-'+t+'-minus" aria-label="Менше">−</button><span class="num">'+f["g"+t]+'</span><button data-act="fg-'+t+'-plus" aria-label="Більше">+</button></span>';}
+  return '<div class="overlay" data-act="close-bg"><div class="sheet" role="dialog" aria-modal="true" aria-labelledby="f-title">'+
+    '<div class="row"><h2 class="h" id="f-title">'+(f.id?"Змінити гру":"Нова гра")+'</h2><button class="edit" data-act="close">Закрити</button></div>'+
+    '<label class="field">Дата<input type="date" id="f-date" value="'+f.date+'"></label>'+
+    '<div class="scorein"><label class="field y">Жовті<input type="number" inputmode="numeric" min="0" id="f-sy" value="'+esc(f.sy)+'" placeholder="–"></label><span class="colon">:</span><label class="field b">Сині<input type="number" inputmode="numeric" min="0" id="f-sb" value="'+esc(f.sb)+'" placeholder="–"></label></div>'+
+    '<p class="note">Залиште рахунок порожнім, якщо гра ще попереду: вона збережеться без впливу на статистику.</p>'+
+    '<div class="counts"><span>Жовті: <b class="y num">'+(ny+f.gy)+'</b></span><span>Сині: <b class="b num">'+(nb+f.gb)+'</b></span></div>'+
+    '<div class="assign">'+rows+'</div>'+
+    '<div class="row"><span class="switch">Гості за жовтих '+step("y")+'</span><span class="switch">Гості за синіх '+step("b")+'</span></div>'+
+    '<div class="inline-add"><input type="text" id="f-new" placeholder="Новий гравець"><button class="btn ghost small" data-act="f-add">Додати</button></div>'+
+    '<div class="actions"><div>'+(f.id?(f.confirmDel?'<button class="btn danger small" data-act="f-del-yes">Так, видалити</button><button class="btn ghost small" data-act="f-del-no">Ні</button>':'<button class="btn ghost small" data-act="f-del">Видалити гру</button>'):'')+'</div>'+
+    '<div><button class="btn ghost" data-act="close">Скасувати</button><button class="btn" data-act="f-save"'+(busy?" disabled":"")+'>'+(busy?"Зберігаю…":"Зберегти")+'</button></div></div>'+
+  '</div></div>';
+}
+function readForm(){var f=ui.form;if(!f)return;var d=document.getElementById("f-date");if(d)f.date=d.value;var a=document.getElementById("f-sy");if(a)f.sy=a.value;var b=document.getElementById("f-sb");if(b)f.sb=b.value;}
+function newId(prefix,list){var i=list.length+1;while(list.some(function(x){return x.id===prefix+i;}))i++;return prefix+i;}
+
+function loginView(){
+  var l=ui.login; if(!l)return "";
+  return '<div class="overlay" data-act="close-bg"><div class="sheet" role="dialog" aria-modal="true" aria-labelledby="l-title">'+
+    '<div class="row"><h2 class="h" id="l-title">Вхід для редактора</h2><button class="edit" data-act="close">Закрити</button></div>'+
+    '<p class="note">Потрібен fine-grained токен GitHub з доступом лише до цього репозиторію і правом Contents: Read and write. Токен зберігається тільки в цьому браузері.</p>'+
+    '<label class="field">Власник репозиторію<input type="text" id="l-owner" value="'+esc(l.owner)+'" autocomplete="off" autocapitalize="off"></label>'+
+    '<label class="field">Назва репозиторію<input type="text" id="l-repo" value="'+esc(l.repo)+'" autocomplete="off" autocapitalize="off"></label>'+
+    '<label class="field">Токен<input type="password" id="l-token" value="" placeholder="github_pat_…" autocomplete="off"></label>'+
+    '<div class="actions"><div></div><div><button class="btn ghost" data-act="close">Скасувати</button><button class="btn" data-act="l-go"'+(busy?" disabled":"")+'>'+(busy?"Перевіряю…":"Увійти")+'</button></div></div>'+
+  '</div></div>';
+}
+function doLogin(){
+  var c={owner:document.getElementById("l-owner").value.trim(),repo:document.getElementById("l-repo").value.trim(),token:document.getElementById("l-token").value.trim()};
+  if(!c.owner||!c.repo||!c.token){toast("Заповніть усі три поля");return;}
+  busy=true; render();
+  loadEditor(c).then(function(d){
+    cfgSet(c); S=d; editor=true; busy=false; ui.login=null; loaded=true; render(); toast("Ви увійшли як редактор");
+  }).catch(function(e){busy=false; render(); toast(e.status?e.message:"Не вдалося підʼєднатися до GitHub. Перевірте дані");});
+}
+function render(){
+  if(!loaded){app.innerHTML='<div class="wrap"><h1 class="brand"><span class="dot" aria-hidden="true"></span>Пʼятниця 5×5</h1><div class="panel"><p class="empty">'+esc(ui.loadError||"Завантажую статистику…")+'</p></div>'+foot()+'</div>'+loginView();return;}
+  var season=curSeason(), games=sortedGames(S.games.filter(function(g){return played(g)&&inSeason(g);}));
+  var ys=years(), seasons=ys.slice().reverse().map(function(y){return '<button class="chip" data-season="'+y+'" aria-pressed="'+(season===y)+'">'+y+'</button>';}).join("")+
+    (ys.length>1||!ys.length?'<button class="chip" data-season="all" aria-pressed="'+(season==="all")+'">Весь час</button>':'');
+  var tabs=[["rating","Рейтинг"],["matches","Матчі"],["gen","Команди"]].concat(editor?[["players","Гравці"]]:[]);
+  if(!editor&&ui.tab==="players")ui.tab="rating";
+  var body=ui.tab==="matches"?matchesView():ui.tab==="gen"?genView():ui.tab==="players"?playersView():ratingView(games);
+  app.innerHTML='<div class="wrap">'+
+    '<header class="top"><h1 class="brand"><span class="dot" aria-hidden="true"></span>Пʼятниця 5×5</h1>'+(editor?'<button class="btn" data-act="new-game">+ Гра</button>':'')+'</header>'+
+    (ui.tab==="gen"||ui.tab==="players"?"":board(games))+
+    '<div class="row"><div class="chips" role="group" aria-label="Сезон">'+seasons+'</div></div>'+
+    '<nav class="tabs" role="tablist">'+tabs.map(function(t){return '<button class="tab" role="tab" data-tab="'+t[0]+'" aria-selected="'+(ui.tab===t[0])+'">'+t[1]+'</button>';}).join("")+'</nav>'+
+    body+foot()+'</div>'+formView()+loginView();
+}
+function foot(){
+  return '<footer class="foot"><span>Дані: data.json у репозиторії</span>'+
+    (editor?'<button data-act="logout">Вийти з режиму редактора</button>':'<button data-act="login">Увійти як редактор</button>')+'</footer>';
+}
+
+/* ---------- events ---------- */
+app.addEventListener("click",function(e){
+  var t=e.target.closest("button,[data-open],[data-act]"); if(!t)return;
+  var ds=t.dataset;
+  if(ds.season){ui.season=ds.season;ui.open=null;render();return;}
+  if(ds.tab){ui.tab=ds.tab;render();return;}
+  if(ds.sort){var k=ds.sort; ui.sort=ui.sort.k===k?{k:k,d:-ui.sort.d}:{k:k,d:k==="name"?1:-1}; render();return;}
+  if(ds.open){ui.open=ui.open===ds.open?null:ds.open;render();return;}
+  if(ds.edit){var g=S.games.filter(function(x){return x.id===ds.edit;})[0]; if(g)openForm(g); return;}
+  if(ds.gsel){var i=ui.gen.sel.indexOf(ds.gsel); if(i>=0)ui.gen.sel.splice(i,1); else ui.gen.sel.push(ds.gsel); ui.gen.res=null; render(); return;}
+  if(ds.as){readForm(); var p=ds.as.split("|"); if(p[1]==="n")delete ui.form.a[p[0]]; else ui.form.a[p[0]]=p[1]; render(); return;}
+  if(ds.pdel!=null){ui.players.splice(+ds.pdel,1);render();return;}
+  var a=ds.act; if(!a)return;
+  if(a==="close-bg"&&e.target!==t)return;
+  switch(a){
+    case "new-game": openForm(null); break;
+    case "close": case "close-bg": ui.form=null; ui.login=null; render(); break;
+    case "login": var gr=guessRepo(), cc=cfgGet(); ui.login={owner:cc.owner||gr.owner,repo:cc.repo||gr.repo}; render(); var lt=document.getElementById(ui.login.owner?"l-token":"l-owner"); if(lt)lt.focus(); break;
+    case "l-go": doLogin(); break;
+    case "logout": cfgSet(null); editor=false; sha=null; if(ui.tab==="players")ui.tab="rating"; render(); toast("Ви вийшли. Токен видалено з цього браузера"); break;
+    case "g-plus": ui.gen.guests++; ui.gen.res=null; render(); break;
+    case "g-minus": ui.gen.guests=Math.max(0,ui.gen.guests-1); ui.gen.res=null; render(); break;
+    case "gen-clear": ui.gen.sel=[]; ui.gen.guests=0; ui.gen.res=null; render(); break;
+    case "gen-run": generate(); render(); break;
+    case "gen-next": if(ui.gen.res){ui.gen.pick=(ui.gen.pick+1)%ui.gen.res.length;} render(); break;
+    case "gen-record": if(ui.gen.res)openForm(null,ui.gen.res[ui.gen.pick]); break;
+    case "fg-y-plus": readForm(); ui.form.gy++; render(); break;
+    case "fg-y-minus": readForm(); ui.form.gy=Math.max(0,ui.form.gy-1); render(); break;
+    case "fg-b-plus": readForm(); ui.form.gb++; render(); break;
+    case "fg-b-minus": readForm(); ui.form.gb=Math.max(0,ui.form.gb-1); render(); break;
+    case "f-add": readForm(); var inp=document.getElementById("f-new"), nm=inp&&inp.value.trim(); if(nm){var id=newId("p",S.players.concat(ui.form.extra)); ui.form.extra.push({id:id,name:nm,active:true});} render(); break;
+    case "f-del": readForm(); ui.form.confirmDel=true; render(); break;
+    case "f-del-no": readForm(); ui.form.confirmDel=false; render(); break;
+    case "f-del-yes": var del=ui.form.id; save({v:S.v,players:S.players,games:S.games.filter(function(x){return x.id!==del;})},"Гру видалено","Видалено гру "+ui.form.date); break;
+    case "f-save": saveForm(); break;
+    case "p-add": var ni=document.getElementById("new-player"),nn=ni&&ni.value.trim(); if(nn){ui.players.push({id:newId("p",ui.players.concat(S.players)),name:nn,active:true});} render(); break;
+    case "p-save": var clean=ui.players.filter(function(p){return p.name.trim();}).map(function(p){return {id:p.id,name:p.name.trim(),active:p.active};}); save({v:S.v,players:clean,games:S.games},"Склад збережено","Оновлено склад гравців"); break;
+  }
+});
+app.addEventListener("keydown",function(e){
+  if((e.key==="Enter"||e.key===" ")&&e.target.dataset&&e.target.dataset.open){e.preventDefault();e.target.click();}
+  if(e.key==="Escape"&&(ui.form||ui.login)){ui.form=null;ui.login=null;render();}
+});
+app.addEventListener("input",function(e){
+  var t=e.target;
+  if(t.dataset.pname!=null&&ui.players)ui.players[+t.dataset.pname].name=t.value;
+});
+app.addEventListener("change",function(e){
+  var t=e.target;
+  if(t.dataset.pact!=null&&ui.players){ui.players[+t.dataset.pact].active=t.checked;render();}
+});
+function saveForm(){
+  readForm(); var f=ui.form;
+  if(!/^\d{4}-\d{2}-\d{2}$/.test(f.date)){toast("Вкажіть дату гри");return;}
+  var hasY=f.sy!=="", hasB=f.sb!=="";
+  if(hasY!==hasB){toast("Вкажіть рахунок обох команд або залиште обидва поля порожніми");return;}
+  if(hasY&&(+f.sy<0||+f.sb<0||isNaN(+f.sy)||isNaN(+f.sb))){toast("Рахунок має бути невідʼємним числом");return;}
+  var y=[],b=[]; Object.keys(f.a).forEach(function(id){if(f.a[id]==="y")y.push(id);else if(f.a[id]==="b")b.push(id);});
+  if(!y.length&&!b.length&&!f.gy&&!f.gb){toast("Відмітьте хоча б одного гравця");return;}
+  var used=y.concat(b), players=S.players.concat(f.extra.filter(function(p){return used.indexOf(p.id)>=0;}));
+  var games=S.games.filter(function(x){return x.id!==f.id;});
+  var id=f.id||("g"+f.date.replace(/-/g,"")); while(!f.id&&games.some(function(x){return x.id===id;}))id+="b";
+  var g={id:id,date:f.date,y:y,b:b,gy:f.gy,gb:f.gb}; if(hasY){g.sy=+f.sy;g.sb=+f.sb;}
+  games.push(g); games=sortedGames(games);
+  ui.season=f.date.slice(0,4);
+  save({v:S.v,players:players,games:games},hasY?"Гру збережено":"Гру збережено без рахунку","Гра "+f.date+(hasY?" "+g.sy+":"+g.sb:" (без рахунку)"));
+}
+
+/* ---------- boot ---------- */
+(function boot(){
+  var c=cfgGet();
+  var done=function(d){S=d; loaded=true; render();};
+  var fail=function(){ui.loadError=location.protocol==="file:"?"Сторінка відкрита як файл з компʼютера. Відкрийте її за посиланням GitHub Pages, тоді підтягнуться дані.":"Не вдалося завантажити data.json. Перевірте, що файл лежить поруч з index.html.";render();};
+  render();
+  if(c.token&&c.owner&&c.repo){
+    loadEditor(c).then(function(d){editor=true;done(d);}).catch(function(e){
+      if(e.status===401){cfgSet(null);toast("Токен більше не діє. Увійдіть заново");}
+      loadPublic().then(done).catch(fail);
+    });
+  } else loadPublic().then(done).catch(fail);
+})();
+})();
+</script>
+</body>
+</html>
