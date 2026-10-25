@@ -104,12 +104,12 @@
   {
    "id": "p21",
    "name": "Антон від Макса",
-   "active": true
+   "active": false
   },
   {
    "id": "p22",
    "name": "Богдан",
-   "active": true
+   "active": false
   },
   {
    "id": "p23",
