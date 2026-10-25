@@ -199,6 +199,46 @@ tr.det td{background:var(--sunk);white-space:normal;text-align:left;color:var(--
 .foot{display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap;color:var(--muted);font-size:13px;padding-top:8px}
 .foot button{background:none;border:0;color:var(--muted);text-decoration:underline;padding:0;font-size:13px}
 .loading{padding:48px 16px;text-align:center;color:var(--muted)}
+
+/* links */
+a.tag{text-decoration:none}
+a.tag:hover{text-decoration:underline}
+a.more{color:var(--blu-ink);font-weight:600;text-decoration:none}
+a.more:hover{text-decoration:underline}
+.back{background:none;border:0;color:var(--muted);padding:0;font-size:14px;align-self:flex-start}
+
+/* player cards */
+.cards{display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:10px;padding:12px 16px 16px}
+.pcard{display:flex;gap:12px;align-items:center;border:1px solid var(--line);border-radius:12px;padding:10px 12px;text-decoration:none;color:var(--ink);background:var(--surface);min-width:0}
+.pcard:hover{background:var(--sunk)}
+.pcard .no{font-family:var(--f-display);font-size:26px;font-weight:600;min-width:34px;text-align:center;color:var(--muted);line-height:1}
+.pcard b{display:block;font-weight:600}
+.pcard small{display:block;color:var(--muted);font-size:12px;line-height:1.3}
+.pcard.off{opacity:.6}
+
+/* profile */
+.prof-head{display:flex;gap:16px;align-items:flex-start;flex-wrap:wrap}
+.prof-no{font-family:var(--f-display);font-weight:600;font-size:40px;line-height:1;width:76px;height:76px;border-radius:50%;display:flex;align-items:center;justify-content:center;background:linear-gradient(135deg,var(--yel-soft) 50%,var(--blu-soft) 50%);flex:none}
+.prof-name{font-family:var(--f-display);font-weight:700;font-size:32px;text-transform:uppercase;line-height:1.05;margin:0;overflow-wrap:anywhere}
+.meta{display:flex;flex-wrap:wrap;gap:4px 16px;color:var(--muted);font-size:14px;margin-top:8px}
+.meta b{color:var(--ink);font-weight:600}
+.quote{margin:10px 0 0;padding:2px 0 2px 12px;border-left:3px solid var(--yel);font-style:italic}
+.tiles{display:grid;grid-template-columns:repeat(auto-fit,minmax(112px,1fr));gap:8px}
+.tile{background:var(--sunk);border-radius:10px;padding:10px 12px}
+.tile .tl{display:block;font-size:11px;text-transform:uppercase;letter-spacing:.07em;color:var(--muted);font-weight:600}
+.tile b{font-family:var(--f-display);font-size:24px;font-weight:500}
+.tile small{color:var(--muted);font-size:12px}
+.dotc{display:inline-block;width:9px;height:9px;border-radius:50%;margin-right:6px}
+.dotc.y{background:var(--yel)} .dotc.b{background:var(--blu)}
+.lastg{display:grid;grid-template-columns:56px 76px 1fr;gap:8px;align-items:center;padding:7px 0;border-bottom:1px solid var(--line);font-size:14px}
+.lastg:last-child{border-bottom:0}
+.lastg>span{white-space:nowrap}
+.lastg .mates{color:var(--muted);font-size:13px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.res-w{color:var(--win)} .res-l{color:var(--loss)} .res-d{color:var(--muted)}
+.field select,.field textarea{border:1px solid var(--line);background:var(--sunk);border-radius:8px;padding:8px 10px;font:inherit;font-size:15px;color:var(--ink)}
+.field textarea{resize:vertical;min-height:64px}
+.warn{color:var(--loss);font-size:12px}
+.two{display:grid;grid-template-columns:1fr 1fr;gap:10px}
 </style>
 </head>
 <body>
@@ -209,7 +249,10 @@ tr.det td{background:var(--sunk);white-space:normal;text-align:left;color:var(--
 /* Дані лежать у data.json поруч зі сторінкою. Редагування: GitHub-токен зберігається лише в цьому браузері. */
 var S = {v:1,players:[],games:[]};
 var MON = ["січ","лют","бер","кві","тра","чер","лип","сер","вер","жов","лис","гру"];
-var ui = {season:null, tab:"rating", sort:{k:"pct",d:-1}, open:null, gen:{sel:[],guests:0,pick:0,res:null}, form:null, players:null, login:null};
+var MONG = ["січня","лютого","березня","квітня","травня","червня","липня","серпня","вересня","жовтня","листопада","грудня"];
+var POS = [["gk","Воротар"],["lb","Лівий захисник"],["rb","Правий захисник"],["cb","Центральний захисник"],["cm","Півзахисник"],["dm","Опорний півзахисник"],["am","Атакувальний півзахисник"],["st","Нападник"],["lw","Лівий вінгер"],["rw","Правий вінгер"]];
+var MS = [10,25,50,75,100,150,200,250,300,400,500];
+var ui = {season:null, tab:"rating", sort:{k:"pct",d:-1}, open:null, gen:{sel:[],guests:0,pick:0,res:null}, form:null, players:null, login:null, profile:null, pedit:null, manage:false, inApp:false};
 var editor=false, busy=false, toastT=null, sha=null, loaded=false;
 var app=document.getElementById("app");
 var LS="futbol55";
@@ -254,20 +297,39 @@ function pmap(){var m={};S.players.forEach(function(p){m[p.id]=p;});return m;}
 function pname(id){var p=pmap()[id];return p?p.name:"?";}
 function played(g){return g.sy!=null&&g.sb!=null&&g.sy!==""&&g.sb!=="";}
 function years(){var y={};S.games.forEach(function(g){y[g.date.slice(0,4)]=1;});return Object.keys(y).sort();}
-function curSeason(){var ys=years(); if(ui.season&&(ui.season==="all"||ys.indexOf(ui.season)>=0))return ui.season; return ys.length?ys[ys.length-1]:"all";}
+function curSeason(){
+  var ys=years(); if(ui.season&&(ui.season==="all"||ys.indexOf(ui.season)>=0))return ui.season;
+  /* за замовчуванням: останній рік із зіграною грою, щоб запланована гра наступного року не відкривала порожній сезон */
+  var pl=S.games.filter(played).map(function(g){return g.date.slice(0,4);}).sort();
+  return pl.length?pl[pl.length-1]:ys.length?ys[ys.length-1]:"all";
+}
 function inSeason(g){var s=curSeason();return s==="all"||g.date.slice(0,4)===s;}
 function sortedGames(list){return list.slice().sort(function(a,b){return a.date<b.date?-1:a.date>b.date?1:0;});}
 function fmtDate(d){var p=d.split("-");return {day:+p[2],mon:MON[+p[1]-1],year:p[0]};}
 function pctS(x){return Math.round(x*100)+"%";}
 function sgn(x){var v=Math.round(x*10)/10;return (v>0?"+":"")+v.toFixed(1);}
+function minGames(n){return Math.max(3,Math.round(n*0.2));}
+function plural(n,f){var a=n%10,b=n%100;return f[a===1&&b!==11?0:a>=2&&a<=4&&(b<10||b>=20)?1:2];}
+function posName(k){for(var i=0;i<POS.length;i++)if(POS[i][0]===k)return POS[i][1];return "";}
+function fmtLong(d){var p=d.split("-");return +p[2]+" "+MONG[+p[1]-1]+" "+p[0];}
+function todayD(){var d=new Date();return new Date(d.getFullYear(),d.getMonth(),d.getDate());}
+function parseD(s){var p=String(s||"").split("-");if(p.length!==3)return null;var d=new Date(+p[0],+p[1]-1,+p[2]);return isNaN(d.getTime())?null:d;}
+function bdayInfo(bd){
+  var b=parseD(bd); if(!b)return null;
+  var t=todayD(), n=new Date(t.getFullYear(),b.getMonth(),b.getDate()); if(n<t)n=new Date(t.getFullYear()+1,b.getMonth(),b.getDate());
+  var before=t.getMonth()<b.getMonth()||(t.getMonth()===b.getMonth()&&t.getDate()<b.getDate());
+  return {days:Math.round((n-t)/864e5),age:t.getFullYear()-b.getFullYear()-(before?1:0),turns:n.getFullYear()-b.getFullYear(),day:b.getDate(),mon:b.getMonth(),year:b.getFullYear()};
+}
+function hasNum(p){return p.num!=null&&p.num!=="";}
+function onTeam(g,id){return (g.y||[]).indexOf(id)>=0?"y":(g.b||[]).indexOf(id)>=0?"b":null;}
 
 function stats(games){
   var st={}, pairs={};
-  function P(id){return st[id]||(st[id]={id:id,g:0,w:0,d:0,l:0,gf:0,ga:0,seq:[],months:{}});}
+  function P(id){return st[id]||(st[id]={id:id,g:0,w:0,d:0,l:0,gf:0,ga:0,seq:[],months:{},t:{y:{g:0,w:0,d:0,l:0},b:{g:0,w:0,d:0,l:0}}});}
   games.forEach(function(g){
     [["y",+g.sy,+g.sb],["b",+g.sb,+g.sy]].forEach(function(t){
       var ids=g[t[0]]||[], my=t[1], op=t[2], r=my>op?"w":my<op?"l":"d";
-      ids.forEach(function(id){var p=P(id);p.g++;p[r]++;p.gf+=my;p.ga+=op;p.seq.push(r);var m=g.date.slice(0,7);p.months[m]=(p.months[m]||0)+1;});
+      ids.forEach(function(id){var p=P(id);p.g++;p[r]++;p.t[t[0]].g++;p.t[t[0]][r]++;p.gf+=my;p.ga+=op;p.seq.push(r);var m=g.date.slice(0,7);p.months[m]=(p.months[m]||0)+1;});
       for(var i=0;i<ids.length;i++)for(var j=i+1;j<ids.length;j++){
         var k=[ids[i],ids[j]].sort().join("|"); var q=pairs[k]||(pairs[k]={a:k.split("|")[0],b:k.split("|")[1],g:0,w:0,d:0});
         q.g++; if(r==="w")q.w++; if(r==="d")q.d++;
@@ -296,7 +358,7 @@ function save(next,okMsg,commitMsg){
     if(!r.ok){return r.text().then(function(){throw new Error(ghError(r));});}
     return r.json();
   }).then(function(j){
-    sha=j.content&&j.content.sha; S=next; busy=false; ui.form=null; ui.players=null; render();
+    sha=j.content&&j.content.sha; S=next; busy=false; ui.form=null; ui.players=null; ui.pedit=null; render();
     toast((okMsg||"Збережено")+". Сайт для всіх оновиться за 1–2 хв");
   }).catch(function(e){busy=false; render(); toast(e.message&&e.message.length>8?e.message:"Немає звʼязку з GitHub. Спробуйте ще раз");});
 }
@@ -313,14 +375,24 @@ function board(games){
     '<div class="side b"><span class="lbl">Сині</span><span class="big num">'+b+'</span></div>'+
     '<div class="bar" aria-hidden="true"><i style="width:'+(n?y/n*100:0)+'%;background:var(--yel)"></i><i style="width:'+(n?d/n*100:0)+'%;background:var(--draw)"></i><i style="width:'+(n?b/n*100:0)+'%;background:var(--blu)"></i></div>'+
     '<div class="facts"><span>Ігор: <b class="num">'+n+'</b></span><span>Голів за гру: <b class="num">'+(n?(goals/n).toFixed(1):"—")+'</b></span>'+
-    '<span>Найчастіше грав: <b>'+(top?esc(pname(top))+" ("+st[top].g+")":"—")+'</b></span><span>Остання гра: <b class="num">'+lastTxt+'</b></span></div>'+
+    '<span>Найчастіше грав: <b>'+(top?esc(pname(top))+" ("+st[top].g+")":"—")+'</b></span><span>Остання гра: <b class="num">'+lastTxt+'</b></span>'+bdayLine()+'</div>'+
   '</section>';
+}
+/* ДН активних гравців у найближчі 7 днів */
+function bdayLine(){
+  var list=[]; S.players.forEach(function(p){if(p.active===false)return; var bi=bdayInfo(p.bd); if(bi&&bi.days<=7)list.push({p:p,bi:bi});});
+  if(!list.length)return "";
+  list.sort(function(a,b){return a.bi.days-b.bi.days;});
+  return '<span>🎂 '+list.map(function(x){
+    var nm='<a class="more" href="#'+esc(x.p.id)+'">'+esc(x.p.name)+'</a>';
+    return x.bi.days===0?nm+' — сьогодні день народження, '+x.bi.turns+'!':nm+' — '+x.bi.day+' '+MONG[x.bi.mon]+' (через '+x.bi.days+' '+plural(x.bi.days,["день","дні","днів"])+'), буде '+x.bi.turns;
+  }).join(" · ")+'</span>';
 }
 
 function ratingView(games){
   if(!games.length)return '<div class="panel"><p class="empty">У цьому сезоні ще немає зіграних матчів.</p></div>';
   var data=stats(games), st=data.players, k=ui.sort.k, d=ui.sort.d;
-  var minG=Math.max(3,Math.round(games.length*0.2));
+  var minG=minGames(games.length);
   var rows=Object.keys(st).map(function(id){return st[id];});
   var val=function(p){return k==="name"?pname(p.id):k==="pts"?p.w*3+p.d:p[k];};
   rows.sort(function(a,b){var x=val(a),y=val(b); if(typeof x==="string")return d*x.localeCompare(y,"uk"); return d*(x-y)||(b.g-a.g);});
@@ -333,7 +405,7 @@ function ratingView(games){
       '<td>'+p.g+'</td><td>'+p.w+'–'+p.d+'–'+p.l+'</td><td>'+(p.w*3+p.d)+'</td>'+
       '<td><span class="pct"><i><s style="width:'+(p.pct*100)+'%"></s></i>'+pctS(p.pct)+'</span></td>'+
       '<td class="'+(p.gd>0.05?"pos":p.gd<-0.05?"neg":"")+'">'+sgn(p.gd)+'</td><td><span class="form">'+form+'</span></td><td>'+pctS(p.att)+'</td></tr>';
-    if(ui.open===p.id)h+='<tr class="det"><td colspan="9">'+detail(p,data,games)+'</td></tr>';
+    if(ui.open===p.id)h+='<tr class="det"><td colspan="9">'+detail(p,data,games)+'<p style="margin:12px 0 0"><a class="more" href="#'+esc(p.id)+'">Повний профіль →</a></p></td></tr>';
     return h;
   }
   var body=main.map(function(p,i){return row(p,i,false);}).join("");
@@ -376,7 +448,7 @@ function matchesView(){
   if(!list.length)return '<div class="panel"><p class="empty">Матчів ще немає.'+(editor?' Додайте перший кнопкою «+ Гра».':'')+'</p></div>';
   return '<div class="panel">'+list.map(function(g){
     var f=fmtDate(g.date), pl=played(g), y=+g.sy, b=+g.sb;
-    function tags(t,n){var a=(g[t]||[]).map(function(id){return '<span class="tag">'+esc(pname(id))+'</span>';});if(n)a.push('<span class="tag">+'+n+' гост'+(n===1?"ь":"і")+'</span>');return a.join("");}
+    function tags(t,n){var a=(g[t]||[]).map(function(id){return '<a class="tag" href="#'+esc(id)+'">'+esc(pname(id))+'</a>';});if(n)a.push('<span class="tag">+'+n+' гост'+(n===1?"ь":"і")+'</span>');return a.join("");}
     var sc=pl?'<span class="ys'+(y<b?" lose":"")+'">'+y+'</span> : <span class="bs'+(b<y?" lose":"")+'">'+b+'</span><small>'+(y>b?"Перемогли жовті":b>y?"Перемогли сині":"Нічия")+'</small>':'<small>Без рахунку</small>';
     return '<div class="match"><div class="date"><b class="num">'+f.day+'</b>'+f.mon+' '+f.year+'</div>'+
       '<div class="team y">'+tags("y",g.gy)+'</div><div class="score num">'+sc+'</div><div class="team b">'+tags("b",g.gb)+'</div>'+
@@ -433,12 +505,151 @@ function playersView(){
   if(!editor)return '<div class="panel"><p class="empty">Редагувати склад може лише власник сторінки.</p></div>';
   var st=stats(S.games.filter(played)).players;
   var list=ui.players||(ui.players=S.players.map(function(p){return {id:p.id,name:p.name,active:p.active!==false};}));
-  return '<div class="panel"><div style="padding:14px 16px"><h2 class="h">Склад</h2><p class="sub">Перейменування не змінює історію. Приховані гравці не показуються у формі гри й генераторі, але їхня статистика залишається.</p></div>'+
+  return '<div class="panel"><div style="padding:14px 16px" class="stack"><button class="back" data-act="manage-off">← До карток гравців</button><div><h2 class="h">Склад</h2><p class="sub">Перейменування не змінює історію. Приховані гравці не показуються у формі гри й генераторі, але їхня статистика залишається.</p></div></div>'+
     list.map(function(p,i){var g=st[p.id]?st[p.id].g:0;return '<div class="prow'+(p.active?"":" off")+'"><input type="text" id="pn-'+p.id+'" data-pname="'+i+'" value="'+esc(p.name)+'" aria-label="Імʼя гравця"><span class="g num">'+g+' ігор</span>'+
       '<label class="switch"><input type="checkbox" id="pa-'+p.id+'" data-pact="'+i+'"'+(p.active?" checked":"")+'> грає</label>'+
       (g===0&&!S.games.some(function(x){return (x.y||[]).concat(x.b||[]).indexOf(p.id)>=0;})?'<button class="edit" data-pdel="'+i+'">Видалити</button>':'')+'</div>';}).join("")+
     '<div class="prow"><div class="inline-add" style="flex:1"><input type="text" id="new-player" placeholder="Новий гравець"><button class="btn ghost small" data-act="p-add">Додати</button></div></div>'+
     '<div style="padding:12px 16px" class="row"><span class="note">'+(busy?"Зберігаю…":"")+'</span><button class="btn" data-act="p-save"'+(busy?" disabled":"")+'>Зберегти склад</button></div></div>';
+}
+
+/* player cards (для всіх) */
+function cardsView(){
+  var st=stats(S.games.filter(played)).players;
+  function card(p){
+    var g=st[p.id]?st[p.id].g:0, pos=(p.pos||[]).map(posName).filter(Boolean).join(", ");
+    return '<a class="pcard'+(p.active===false?" off":"")+'" href="#'+esc(p.id)+'"><span class="no num">'+(hasNum(p)?esc(p.num):"–")+'</span>'+
+      '<span style="min-width:0"><b>'+esc(p.name)+'</b><small>'+(pos?esc(pos):"Позиція не вказана")+'</small><small>'+g+' '+plural(g,["гра","гри","ігор"])+'</small></span></a>';
+  }
+  var byName=function(a,b){return a.name.localeCompare(b.name,"uk");};
+  var act=S.players.filter(function(p){return p.active!==false;}).sort(byName), off=S.players.filter(function(p){return p.active===false;}).sort(byName);
+  return '<div class="panel"><div class="row" style="padding:14px 16px 0"><div><h2 class="h">Гравці</h2><p class="sub">Натисніть на гравця, щоб відкрити профіль</p></div>'+
+    (editor?'<button class="btn ghost small" data-act="manage">Керувати складом</button>':'')+'</div>'+
+    '<div class="cards">'+act.map(card).join("")+'</div>'+
+    (off.length?'<p class="sub" style="padding:0 16px">Більше не грають</p><div class="cards">'+off.map(card).join("")+'</div>':'')+'</div>';
+}
+
+/* profile */
+function rivals(id,games){
+  var m={};
+  games.forEach(function(g){
+    var side=onTeam(g,id); if(!side)return;
+    var my=side==="y"?+g.sy:+g.sb, op=side==="y"?+g.sb:+g.sy, r=my>op?"w":my<op?"l":"d";
+    (g[side==="y"?"b":"y"]||[]).forEach(function(o){var q=m[o]||(m[o]={id:o,g:0,w:0,d:0,l:0});q.g++;q[r]++;});
+  });
+  return Object.keys(m).map(function(k){return m[k];}).filter(function(q){return q.g>=3;});
+}
+function nextMs(v){for(var i=0;i<MS.length;i++)if(MS[i]>v)return MS[i];return Math.ceil((v+1)/100)*100;}
+function profileView(id){
+  var p=pmap()[id], back='<button class="back" data-act="back">← Назад</button>';
+  if(!p)return '<div class="panel pad stack">'+back+'<p class="empty">Гравця не знайдено.</p></div>';
+  var all=sortedGames(S.games.filter(played)), car=stats(all).players[id];
+  var games=sortedGames(all.filter(inSeason)), data=stats(games), s=data.players[id];
+  var season=curSeason(), sl=season==="all"?"Весь час":"Сезон "+season;
+
+  /* шапка */
+  var bi=bdayInfo(p.bd), pos=(p.pos||[]).map(posName).filter(Boolean), meta=[];
+  if(pos.length)meta.push((pos.length>1?"Бажані позиції: ":"Бажана позиція: ")+'<b>'+esc(pos.join(", "))+'</b>');
+  if(p.foot)meta.push('Ведуча нога: <b>'+(p.foot==="l"?"ліва":"права")+'</b>');
+  if(p.h)meta.push('Зріст: <b>'+esc(p.h)+' см</b>');
+  if(bi)meta.push('<b>'+bi.age+' '+plural(bi.age,["рік","роки","років"])+'</b> · '+bi.day+' '+MONG[bi.mon]+' '+bi.year+(bi.days===0?' · 🎂 сьогодні!':bi.days<=7?' · 🎂 через '+bi.days+' '+plural(bi.days,["день","дні","днів"]):''));
+  var first=null; for(var i=0;i<all.length;i++)if(onTeam(all[i],id)){first=all[i];break;}
+  if(first)meta.push('Перша гра: <b>'+fmtLong(first.date)+'</b>');
+  var empty=!meta.length&&!p.quote;
+  var head='<div class="panel pad stack">'+back+
+    '<div class="prof-head"><div class="prof-no num">'+(hasNum(p)?esc(p.num):"–")+'</div>'+
+    '<div style="flex:1;min-width:200px"><h2 class="prof-name">'+esc(p.name)+'</h2>'+(p.active===false?'<p class="sub">Більше не грає</p>':'')+
+    (meta.length?'<div class="meta">'+meta.map(function(x){return '<span>'+x+'</span>';}).join("")+'</div>':'')+
+    (p.quote?'<p class="quote">«'+esc(p.quote)+'»</p>':'')+
+    (empty&&editor?'<p class="note">Профіль ще не заповнений.</p>':'')+'</div>'+
+    (editor?'<button class="btn ghost small" data-act="pe-open">Редагувати</button>':'')+'</div></div>';
+
+  /* віхи (за весь час) */
+  function ms(v,f){var n=nextMs(v);return '<div class="mate"><span>'+n+'-'+f[0]+'</span><span>лишилось '+(n-v)+'</span></div>';}
+  var miles='<div><h4>Віхи за весь час</h4>'+(car?
+    '<div class="mate"><span>Зараз</span><span>'+car.g+' '+plural(car.g,["гра","гри","ігор"])+' · '+car.w+' '+plural(car.w,["перемога","перемоги","перемог"])+'</span></div>'+
+    ms(car.g,["та гра"])+ms(car.w,["та перемога"]):'<div class="note">Ще не грав</div>')+'</div>';
+
+  if(!s)return head+'<div class="panel pad stack"><h2 class="h">'+sl+'</h2><p class="note">У цьому періоді ще не грав.</p><div class="det-grid">'+miles+'</div></div>';
+
+  /* плитки */
+  var rows=Object.keys(data.players).map(function(k){return data.players[k];}), pts=function(x){return x.w*3+x.d;};
+  var rk=1+rows.filter(function(x){return pts(x)>pts(s);}).length;
+  var mg=minGames(games.length), el=rows.filter(function(x){return x.g>=mg;}), rp=s.g>=mg?1+el.filter(function(x){return x.pct>s.pct;}).length:null;
+  function tile(l,v,sm){return '<div class="tile"><span class="tl">'+l+'</span><b class="num">'+v+'</b>'+(sm?' <small>'+sm+'</small>':'')+'</div>';}
+  var tiles='<div class="tiles">'+tile("Ігор",s.g)+tile("В–Н–П",s.w+"–"+s.d+"–"+s.l)+tile("Очки",pts(s))+tile("%В",pctS(s.pct))+
+    tile("+/− за гру",'<span class="'+(s.gd>0.05?"pos":s.gd<-0.05?"neg":"")+'">'+sgn(s.gd)+'</span>')+tile("Відвідув.",pctS(s.att))+
+    tile("Місце, очки",rk,"з "+rows.length)+tile("Місце, %В",rp||"—",rp?"з "+el.length:"від "+mg+" ігор")+'</div>';
+
+  /* кольори, суперники */
+  function tl(lbl,c,t){return '<div class="mate"><span><span class="dotc '+c+'"></span>'+lbl+'</span><span>'+(t.g?t.g+' · '+t.w+'–'+t.d+'–'+t.l+' · '+pctS(t.w/t.g):'—')+'</span></div>';}
+  var colors='<div><h4>За кольором</h4>'+tl("За жовтих","y",s.t.y)+tl("За синіх","b",s.t.b)+'</div>';
+  var rv=rivals(id,games);
+  var beat=rv.slice().sort(function(a,b){return b.w/b.g-a.w/a.g||b.g-a.g;}).filter(function(q){return q.w>0;}).slice(0,3);
+  var lose=rv.slice().sort(function(a,b){return b.l/b.g-a.l/a.g||b.g-a.g;}).filter(function(q){return q.l>0&&beat.indexOf(q)<0;}).slice(0,3);
+  function rl(list,k){return list.length?list.map(function(q){return '<div class="mate"><span>'+esc(pname(q.id))+'</span><span>'+q[k]+' з '+q.g+'</span></div>';}).join(""):'<div class="note">Замало ігор один проти одного</div>';}
+  var riv='<div><h4>Найчастіше обігрує</h4>'+rl(beat,"w")+'</div><div><h4>Найчастіше програє</h4>'+rl(lose,"l")+'</div>';
+
+  /* останні матчі */
+  var mine=games.filter(function(g){return onTeam(g,id);}).slice(-10).reverse();
+  var last=mine.map(function(g){
+    var side=onTeam(g,id), my=side==="y"?+g.sy:+g.sb, op=side==="y"?+g.sb:+g.sy, r=my>op?"w":my<op?"l":"d", f=fmtDate(g.date);
+    var mates=(g[side]||[]).filter(function(x){return x!==id;}).map(pname), gu=side==="y"?g.gy:g.gb; if(gu)mates.push("+"+gu+" "+plural(gu,["гість","гості","гостей"]));
+    return '<div class="lastg"><span class="num">'+f.day+' '+f.mon+'</span><span class="num"><span class="dotc '+side+'"></span><b class="res-'+r+'">'+my+':'+op+'</b></span><span class="mates">'+esc(mates.join(", ")||"—")+'</span></div>';
+  }).join("");
+
+  return head+'<div class="panel pad stack"><div><h2 class="h">'+sl+'</h2><p class="sub">Сезон перемикається чипами вгорі</p></div>'+tiles+
+    detail(s,data,games)+'<div class="det-grid">'+colors+riv+miles+'</div>'+
+    '<div><h4 class="sub" style="margin:0 0 4px;text-transform:uppercase;letter-spacing:.08em;font-size:11px;font-weight:600">Останні матчі</h4>'+last+'</div></div>';
+}
+
+/* profile edit (редактор) */
+function openPedit(id){
+  var p=pmap()[id]; if(!p)return;
+  ui.pedit={id:id}; render();
+  var el=document.getElementById("e-name"); if(el)el.focus();
+}
+function numWarn(id,num){
+  if(num===""||num==null)return "";
+  var o=S.players.filter(function(p){return p.id!==id&&p.active!==false&&hasNum(p)&&+p.num===+num;})[0];
+  return o?"Номер "+(+num)+" уже в гравця "+o.name+". Зберегти все одно можна.":"";
+}
+function peditView(){
+  var f=ui.pedit; if(!f)return ""; var p=pmap()[f.id]; if(!p)return "";
+  var pos=p.pos||[];
+  function opts(sel){return '<option value="">Не вказано</option>'+POS.map(function(o){return '<option value="'+o[0]+'"'+(sel===o[0]?" selected":"")+'>'+o[1]+'</option>';}).join("");}
+  return '<div class="overlay" data-act="close-bg"><div class="sheet" role="dialog" aria-modal="true" aria-labelledby="e-title">'+
+    '<div class="row"><h2 class="h" id="e-title">Профіль</h2><button class="edit" data-act="close">Закрити</button></div>'+
+    '<label class="field">Імʼя<input type="text" id="e-name" value="'+esc(p.name)+'"></label>'+
+    '<div class="two"><label class="field">Номер<input type="number" inputmode="numeric" min="0" max="99" id="e-num" value="'+(hasNum(p)?esc(p.num):"")+'"></label>'+
+    '<label class="field">Зріст, см<input type="number" inputmode="numeric" min="120" max="230" id="e-h" value="'+(p.h?esc(p.h):"")+'"></label></div>'+
+    '<p class="warn" id="e-numwarn">'+esc(numWarn(p.id,p.num))+'</p>'+
+    '<div class="two"><label class="field">Бажана позиція<select id="e-pos1">'+opts(pos[0])+'</select></label>'+
+    '<label class="field">Друга позиція<select id="e-pos2">'+opts(pos[1])+'</select></label></div>'+
+    '<div class="two"><label class="field">Ведуча нога<select id="e-foot"><option value="">Не вказано</option><option value="l"'+(p.foot==="l"?" selected":"")+'>Ліва</option><option value="r"'+(p.foot==="r"?" selected":"")+'>Права</option></select></label>'+
+    '<label class="field">Дата народження<input type="date" id="e-bd" value="'+esc(p.bd||"")+'"></label></div>'+
+    '<label class="field">Цитата<textarea id="e-quote" maxlength="140" placeholder="До 140 символів">'+esc(p.quote||"")+'</textarea></label>'+
+    '<div class="actions"><div></div><div><button class="btn ghost" data-act="close">Скасувати</button><button class="btn" data-act="pe-save"'+(busy?" disabled":"")+'>'+(busy?"Зберігаю…":"Зберегти")+'</button></div></div>'+
+  '</div></div>';
+}
+function savePedit(){
+  var f=ui.pedit; if(!f)return;
+  function v(id){var el=document.getElementById(id);return el?el.value:"";}
+  var name=v("e-name").trim(), num=v("e-num").trim(), h=v("e-h").trim(), bd=v("e-bd"), foot=v("e-foot"), q=v("e-quote").trim();
+  if(!name){toast("Вкажіть імʼя");return;}
+  if(num!==""&&!/^\d{1,2}$/.test(num)){toast("Номер: ціле число від 0 до 99");return;}
+  if(h!==""&&!(/^\d{3}$/.test(h)&&+h>=120&&+h<=230)){toast("Зріст: від 120 до 230 см");return;}
+  if(bd){var b=parseD(bd); if(!b||b>todayD()||b.getFullYear()<1940){toast("Перевірте дату народження");return;}}
+  var pos=[v("e-pos1"),v("e-pos2")].filter(function(x,i,a){return x&&a.indexOf(x)===i;});
+  var KEYS=["id","name","active","num","pos","foot","h","bd","quote"];
+  var players=S.players.map(function(p){
+    if(p.id!==f.id)return p;
+    var n={id:p.id,name:name,active:p.active!==false};
+    if(num!=="")n.num=+num; if(pos.length)n.pos=pos; if(foot)n.foot=foot; if(h!=="")n.h=+h; if(bd)n.bd=bd; if(q)n.quote=q;
+    Object.keys(p).forEach(function(k){if(KEYS.indexOf(k)<0)n[k]=p[k];});
+    return n;
+  });
+  save({v:S.v,players:players,games:S.games},"Профіль збережено","Профіль: "+name);
 }
 
 /* game form */
@@ -498,15 +709,17 @@ function render(){
   var season=curSeason(), games=sortedGames(S.games.filter(function(g){return played(g)&&inSeason(g);}));
   var ys=years(), seasons=ys.slice().reverse().map(function(y){return '<button class="chip" data-season="'+y+'" aria-pressed="'+(season===y)+'">'+y+'</button>';}).join("")+
     (ys.length>1||!ys.length?'<button class="chip" data-season="all" aria-pressed="'+(season==="all")+'">Весь час</button>':'');
-  var tabs=[["rating","Рейтинг"],["matches","Матчі"],["gen","Команди"]].concat(editor?[["players","Гравці"]]:[]);
-  if(!editor&&ui.tab==="players")ui.tab="rating";
-  var body=ui.tab==="matches"?matchesView():ui.tab==="gen"?genView():ui.tab==="players"?playersView():ratingView(games);
+  var tabs=[["rating","Рейтинг"],["matches","Матчі"],["gen","Команди"],["players","Гравці"]];
+  if(!editor)ui.manage=false;
+  var prof=ui.profile, curTab=prof?"players":ui.tab;
+  var body=prof?profileView(prof):ui.tab==="matches"?matchesView():ui.tab==="gen"?genView():ui.tab==="players"?(ui.manage?playersView():cardsView()):ratingView(games);
+  var pp=prof&&pmap()[prof]; document.title=pp?pp.name+" · Пʼятниця 5×5":"Пʼятниця 5×5";
   app.innerHTML='<div class="wrap">'+
     '<header class="top"><h1 class="brand"><span class="dot" aria-hidden="true"></span>Пʼятниця 5×5</h1>'+(editor?'<button class="btn" data-act="new-game">+ Гра</button>':'')+'</header>'+
-    (ui.tab==="gen"||ui.tab==="players"?"":board(games))+
-    '<div class="row"><div class="chips" role="group" aria-label="Сезон">'+seasons+'</div></div>'+
-    '<nav class="tabs" role="tablist">'+tabs.map(function(t){return '<button class="tab" role="tab" data-tab="'+t[0]+'" aria-selected="'+(ui.tab===t[0])+'">'+t[1]+'</button>';}).join("")+'</nav>'+
-    body+foot()+'</div>'+formView()+loginView();
+    (prof||ui.tab==="gen"||ui.tab==="players"?"":board(games))+
+    (prof||(ui.tab!=="gen"&&ui.tab!=="players")?'<div class="row"><div class="chips" role="group" aria-label="Сезон">'+seasons+'</div></div>':"")+
+    '<nav class="tabs" role="tablist">'+tabs.map(function(t){return '<button class="tab" role="tab" data-tab="'+t[0]+'" aria-selected="'+(curTab===t[0])+'">'+t[1]+'</button>';}).join("")+'</nav>'+
+    body+foot()+'</div>'+formView()+loginView()+peditView();
 }
 function foot(){
   return '<footer class="foot"><span>Дані: data.json у репозиторії</span>'+
@@ -514,11 +727,15 @@ function foot(){
 }
 
 /* ---------- events ---------- */
+function clearHash(){if(location.hash)history.replaceState(null,"",location.pathname+location.search);ui.profile=null;}
+function route(){var m=location.hash.match(/^#(p[\w-]+)$/);ui.profile=m?m[1]:null;}
+window.addEventListener("hashchange",function(){route();render();window.scrollTo(0,0);});
 app.addEventListener("click",function(e){
+  if(e.target.closest('a[href^="#p"]')){ui.inApp=true;return;}
   var t=e.target.closest("button,[data-open],[data-act]"); if(!t)return;
   var ds=t.dataset;
   if(ds.season){ui.season=ds.season;ui.open=null;render();return;}
-  if(ds.tab){ui.tab=ds.tab;render();return;}
+  if(ds.tab){ui.tab=ds.tab;ui.manage=false;clearHash();render();return;}
   if(ds.sort){var k=ds.sort; ui.sort=ui.sort.k===k?{k:k,d:-ui.sort.d}:{k:k,d:k==="name"?1:-1}; render();return;}
   if(ds.open){ui.open=ui.open===ds.open?null:ds.open;render();return;}
   if(ds.edit){var g=S.games.filter(function(x){return x.id===ds.edit;})[0]; if(g)openForm(g); return;}
@@ -529,10 +746,15 @@ app.addEventListener("click",function(e){
   if(a==="close-bg"&&e.target!==t)return;
   switch(a){
     case "new-game": openForm(null); break;
-    case "close": case "close-bg": ui.form=null; ui.login=null; render(); break;
+    case "close": case "close-bg": ui.form=null; ui.login=null; ui.pedit=null; render(); break;
+    case "back": if(ui.inApp){ui.inApp=false;history.back();}else{clearHash();render();window.scrollTo(0,0);} break;
+    case "manage": ui.manage=true; render(); break;
+    case "manage-off": ui.manage=false; ui.players=null; render(); break;
+    case "pe-open": if(ui.profile)openPedit(ui.profile); break;
+    case "pe-save": savePedit(); break;
     case "login": var gr=guessRepo(), cc=cfgGet(); ui.login={owner:cc.owner||gr.owner,repo:cc.repo||gr.repo}; render(); var lt=document.getElementById(ui.login.owner?"l-token":"l-owner"); if(lt)lt.focus(); break;
     case "l-go": doLogin(); break;
-    case "logout": cfgSet(null); editor=false; sha=null; if(ui.tab==="players")ui.tab="rating"; render(); toast("Ви вийшли. Токен видалено з цього браузера"); break;
+    case "logout": cfgSet(null); editor=false; sha=null; ui.manage=false; ui.pedit=null; render(); toast("Ви вийшли. Токен видалено з цього браузера"); break;
     case "g-plus": ui.gen.guests++; ui.gen.res=null; render(); break;
     case "g-minus": ui.gen.guests=Math.max(0,ui.gen.guests-1); ui.gen.res=null; render(); break;
     case "gen-clear": ui.gen.sel=[]; ui.gen.guests=0; ui.gen.res=null; render(); break;
@@ -549,15 +771,16 @@ app.addEventListener("click",function(e){
     case "f-del-yes": var del=ui.form.id; save({v:S.v,players:S.players,games:S.games.filter(function(x){return x.id!==del;})},"Гру видалено","Видалено гру "+ui.form.date); break;
     case "f-save": saveForm(); break;
     case "p-add": var ni=document.getElementById("new-player"),nn=ni&&ni.value.trim(); if(nn){ui.players.push({id:newId("p",ui.players.concat(S.players)),name:nn,active:true});} render(); break;
-    case "p-save": var clean=ui.players.filter(function(p){return p.name.trim();}).map(function(p){return {id:p.id,name:p.name.trim(),active:p.active};}); save({v:S.v,players:clean,games:S.games},"Склад збережено","Оновлено склад гравців"); break;
+    case "p-save": var orig=pmap(); var clean=ui.players.filter(function(p){return p.name.trim();}).map(function(p){var o=orig[p.id]||{},n={};Object.keys(o).forEach(function(k){n[k]=o[k];});n.id=p.id;n.name=p.name.trim();n.active=p.active;return n;}); save({v:S.v,players:clean,games:S.games},"Склад збережено","Оновлено склад гравців"); break;
   }
 });
 app.addEventListener("keydown",function(e){
   if((e.key==="Enter"||e.key===" ")&&e.target.dataset&&e.target.dataset.open){e.preventDefault();e.target.click();}
-  if(e.key==="Escape"&&(ui.form||ui.login)){ui.form=null;ui.login=null;render();}
+  if(e.key==="Escape"&&(ui.form||ui.login||ui.pedit)){ui.form=null;ui.login=null;ui.pedit=null;render();}
 });
 app.addEventListener("input",function(e){
   var t=e.target;
+  if(t.id==="e-num"&&ui.pedit){var w=document.getElementById("e-numwarn");if(w)w.textContent=numWarn(ui.pedit.id,t.value.trim());}
   if(t.dataset.pname!=null&&ui.players)ui.players[+t.dataset.pname].name=t.value;
 });
 app.addEventListener("change",function(e){
@@ -577,13 +800,14 @@ function saveForm(){
   var id=f.id||("g"+f.date.replace(/-/g,"")); while(!f.id&&games.some(function(x){return x.id===id;}))id+="b";
   var g={id:id,date:f.date,y:y,b:b,gy:f.gy,gb:f.gb}; if(hasY){g.sy=+f.sy;g.sb=+f.sb;}
   games.push(g); games=sortedGames(games);
-  ui.season=f.date.slice(0,4);
+  if(hasY||ui.tab==="matches")ui.season=f.date.slice(0,4);
   save({v:S.v,players:players,games:games},hasY?"Гру збережено":"Гру збережено без рахунку","Гра "+f.date+(hasY?" "+g.sy+":"+g.sb:" (без рахунку)"));
 }
 
 /* ---------- boot ---------- */
 (function boot(){
   var c=cfgGet();
+  route();
   var done=function(d){S=d; loaded=true; render();};
   var fail=function(){ui.loadError=location.protocol==="file:"?"Сторінка відкрита як файл з компʼютера. Відкрийте її за посиланням GitHub Pages, тоді підтягнуться дані.":"Не вдалося завантажити data.json. Перевірте, що файл лежить поруч з index.html.";render();};
   render();
