@@ -90,7 +90,9 @@
   {
    "id": "p14",
    "name": "Влад",
-   "active": true
+   "active": true,
+   "phone": "+380 95 420 65 60",
+   "tg": "vlad_shtefyuk"
   },
   {
    "id": "p15",
