@@ -34,7 +34,9 @@
   {
    "id": "p4",
    "name": "Веталь",
-   "active": true
+   "active": true,
+   "phone": "+380 96 182 79 94",
+   "tg": "maks_v10"
   },
   {
    "id": "p5",
