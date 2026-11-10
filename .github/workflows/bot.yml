@@ -7,7 +7,7 @@ on:
   push:
     paths: [data.json]
   schedule:
-    - cron: "7,22,37,52 * * * *"
+    - cron: "*/15 * * * *"
   workflow_dispatch:
     inputs:
       mode:
