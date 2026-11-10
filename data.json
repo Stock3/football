@@ -61,7 +61,9 @@
   {
    "id": "p9",
    "name": "Ігор",
-   "active": true
+   "active": true,
+   "phone": "+380 98 282 80 88",
+   "tg": "Igor_Stasyuk"
   },
   {
    "id": "p10",
