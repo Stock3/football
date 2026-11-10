@@ -27,7 +27,9 @@
   {
    "id": "p3",
    "name": "Коля",
-   "active": true
+   "active": true,
+   "phone": "+380 68 050 34 35",
+   "tg": "tom_chikk"
   },
   {
    "id": "p4",
