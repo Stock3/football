@@ -1,6 +1,6 @@
 # Telegram-бот «Пʼятниця 5×5»: подяки за оплату й нагадування боржникам.
 # Запускається: після кожного збереження data.json, кожні 15 хв (нові підключення до бота й нагадування за розкладом)
-# і вручну з сайту (кнопки «Нагадати»). Токен бота — у секреті TG_TOKEN.
+# і вручну з сайту (кнопки «Нагадати», «Збір є», «Збір скасовано»). Токен бота — у секреті TG_TOKEN.
 name: Telegram-бот
 
 on:
@@ -11,11 +11,15 @@ on:
   workflow_dispatch:
     inputs:
       mode:
-        description: "auto — звичайний запуск, remind — нагадати зараз"
+        description: "auto — звичайний запуск, remind — нагадати зараз, gather — «Збір є», cancel — «Збір скасовано»"
         default: auto
         required: false
       player:
         description: "id гравця для нагадування (порожньо — усім боржникам)"
+        default: ""
+        required: false
+      game:
+        description: "id гри для gather/cancel"
         default: ""
         required: false
 
@@ -45,6 +49,7 @@ jobs:
           TG_TOKEN: ${{ secrets.TG_TOKEN }}
           MODE: ${{ inputs.mode || 'auto' }}
           PLAYER: ${{ inputs.player || '' }}
+          GAME: ${{ inputs.game || '' }}
 
       - name: Зберегти стан бота (tg.json)
         run: |

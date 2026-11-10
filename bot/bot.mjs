@@ -2,7 +2,8 @@
 // Що робить за один запуск:
 //  1) забирає нові повідомлення боту (/start, /status, /stop) і привʼязує Telegram до гравця;
 //  2) дякує тим, кому щойно позначили оплату;
-//  3) нагадує боржникам (за розкладом з налаштувань або вручну з сайту).
+//  3) нагадує боржникам (за розкладом з налаштувань або вручну з сайту);
+//  4) за кнопками на сайті оголошує «Збір є» / «Збір скасовано» гравцям конкретної гри (MODE=gather|cancel, GAME=id).
 //     Розклад: «через N днів після гри» або «у вибрані дні тижня», один чи кілька часів (Київ), тихі години.
 // Стан бота (хто підключений, кому що вже надіслано) лежить у tg.json поруч з data.json.
 // Тексти й налаштування беруться з data.json → settings; стандартні значення — з блоку DEF в index.html.
@@ -12,8 +13,9 @@ import path from "node:path";
 const ROOT = process.env.ROOT || ".";
 const TOKEN = process.env.TG_TOKEN || "";
 const API = (process.env.TG_API || "https://api.telegram.org") + "/bot" + TOKEN + "/";
-const MODE = process.env.MODE || "auto"; // auto | remind
+const MODE = process.env.MODE || "auto"; // auto | remind | gather | cancel
 const ONLY = (process.env.PLAYER || "").trim();
+const GAME = (process.env.GAME || "").trim();
 const NOW = process.env.NOW ? new Date(process.env.NOW) : new Date();
 const SITE = process.env.SITE || (process.env.GITHUB_REPOSITORY
   ? `https://${process.env.GITHUB_REPOSITORY.split("/")[0].toLowerCase()}.github.io/${process.env.GITHUB_REPOSITORY.split("/")[1]}/`
@@ -66,7 +68,7 @@ const dmon = (d) => { const p = d.split("-"); return +p[2] + " " + MONG[+p[1] - 
 
 // ---------- дані ----------
 const players = Object.fromEntries(data.players.map((p) => [p.id, p]));
-const played = (g) => g.sy != null && g.sb != null && g.sy !== "" && g.sb !== "";
+const played = (g) => !g.x && g.sy != null && g.sb != null && g.sy !== "" && g.sb !== ""; // x — скасована гра
 const tracked = (g) => played(g) && !!S.payFrom && g.date >= S.payFrom;
 const payers = (g) => [...(g.y || []), ...(g.b || [])].filter((id) => id !== S.org);
 const games = data.games.filter(tracked).sort((a, b) => (a.date < b.date ? -1 : a.date > b.date ? 1 : 0));
@@ -223,8 +225,37 @@ async function reminders(manual) {
   if (slots.length) { tg.slots.push(...slots); changed = true; }
 }
 
+// ---------- 4. оголошення гри ----------
+// Пише лише тим, хто відмічений у грі (c — «буде», y/b — команди). ann і x у data.json ставить сайт.
+const DAYS = ["неділя", "понеділок", "вівторок", "середа", "четвер", "пʼятниця", "субота"];
+function gameVars(g, pid) {
+  const ids = [...new Set([...(g.c || []), ...(g.y || []), ...(g.b || [])])];
+  const guests = (+g.gy || 0) + (+g.gb || 0);
+  const names = ids.map((id) => players[id]?.name || "?");
+  return {
+    name: players[pid]?.name || "", date: dmon(g.date), day: DAYS[new Date(g.date + "T00:00:00Z").getUTCDay()],
+    time: S.time || "", place: S.place || "", count: ids.length + guests,
+    list: names.join(", ") + (guests ? ` + ${guests} ${guests === 1 ? "гість" : guests < 5 ? "гості" : "гостей"}` : ""), site: SITE,
+  };
+}
+async function announce(kind) {
+  const g = data.games.find((x) => x.id === GAME);
+  if (!g) { console.log(`Гру ${GAME || "(не вказано)"} не знайдено`); return; }
+  const texts = S[kind] || [];
+  if (!texts.length) { console.log(`Немає текстів «${kind}» у налаштуваннях`); return; }
+  const ids = [...new Set([...(g.c || []), ...(g.y || []), ...(g.b || [])])];
+  const ok = [], no = [];
+  for (const pid of ids) {
+    if (tg.chats[pid] && (await sendTo(pid, fill(pick(texts), gameVars(g, pid))))) ok.push(players[pid]?.name || pid);
+    else no.push(players[pid]?.name || pid);
+  }
+  console.log(`${kind === "gather" ? "Збір є" : "Збір скасовано"} (${g.date}): надіслано ${ok.length} — ${ok.join(", ") || "нікому"}`);
+  if (no.length) console.log(`Не надіслано (бот не підключено або помилка): ${no.join(", ")}`);
+}
+
 // ---------- запуск ----------
 try { await pollUpdates(); } catch (e) { console.log("getUpdates:", e.message); }
+if (MODE === "gather" || MODE === "cancel") await announce(MODE);
 if (S.payFrom) {
   await thanks();
   await reminders(MODE === "remind");

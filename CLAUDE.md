@@ -12,12 +12,15 @@
 ## Схема data.json
 ```
 { "v":1,
-  "settings":{ price, card, cardName, bank, payFrom, org, bot, remind:{on,after,every,max,hour}, thanks[], reminders[], hello, verdicts:{w[],l[],d[]} },
+  "settings":{ price, card, cardName, bank, payFrom, org, bot, remind:{on,mode:"after"|"days",after,days[1–7],times["HH:MM"],quiet:{from,to},every,max,hour?}, thanks[], reminders[], hello, verdicts:{w[],l[],d[]}, time, place, gather[], cancel[] },
   "players":[{ id:"p1", name, active, num?, pos?:[≤2 кодів], foot?:"l"|"r", h?, bd?:"YYYY-MM-DD", quote?, phone?, tg? }],
-  "games":[{ id:"g20261009", date, y:[ids], b:[ids], gy, gb, sy?, sb?, paid?:[ids] }] }
+  "games":[{ id:"g20261009", date, c?:[ids], y:[ids], b:[ids], gy, gb, sy?, sb?, paid?:[ids], x?:true, ann?:{gather?:ISO, cancel?:ISO} }] }
 ```
 - y/b — гравці жовтих/синіх; gy/gb — кількість анонімних гостей; sy/sb — рахунок. Без sy/sb — запланована гра, у статистику не йде.
 - Сезони — роки з дат ігор + «Весь час».
+- c — «буде» (прийде, команда ще невідома); гравець лише в одному з c/y/b. Гру з рахунком не можна зберегти, поки в c хтось є. c у статистику й оплату не йде.
+- x:true — гра скасована: не йде ні в статистику, ні в оплату (played() її відкидає). ann — коли сайт попросив бота надіслати «Збір є»/«Збір скасовано» (ann і x пише сайт, бот пише лише tg.json).
+- remind.hour — старий формат (без times): означає час відправки HH:00, без тихих годин.
 - Оплата рахується для зіграних ігор з датою ≥ settings.payFrom; платять усі гравці гри, крім settings.org; гості не платять.
 
 ## Домовленості
@@ -30,6 +33,6 @@
 
 ## Ідеї на потім
 - «Скопіювати для групи» після збереження гри: текст для Telegram з рахунком, складами й 2–3 фактами; «Скопіювати склади» в генераторі.
-- Бот: опитування відвідуваності щосереди, «хто йде» на сайті, нагадування в пʼятницю.
+- Бот: опитування відвідуваності щосереди (заповнювати c автоматично), нагадування в пʼятницю.
 - Elo-рейтинг (і для балансу команд), head-to-head, графік форми.
 - Досягнення й екран «Сезон у цифрах».
