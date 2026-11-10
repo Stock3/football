@@ -49,7 +49,9 @@
   {
    "id": "p7",
    "name": "Ден",
-   "active": true
+   "active": true,
+   "phone": "+380 99 066 77 13",
+   "tg": "Dionisqa"
   },
   {
    "id": "p8",
