@@ -111,7 +111,9 @@
   {
    "id": "p16",
    "name": "Назар від Влада",
-   "active": true
+   "active": true,
+   "phone": "+380 95 477 02 06",
+   "tg": "mononazar"
   },
   {
    "id": "p17",
