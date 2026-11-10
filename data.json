@@ -56,7 +56,9 @@
   {
    "id": "p8",
    "name": "Назар",
-   "active": true
+   "active": true,
+   "phone": "+380 50 140 65 31",
+   "tg": "nazar_pochaiv"
   },
   {
    "id": "p9",
