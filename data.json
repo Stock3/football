@@ -42,7 +42,9 @@
   {
    "id": "p6",
    "name": "Макс",
-   "active": true
+   "active": true,
+   "phone": "+380 99 511 38 88",
+   "tg": "mstrilec"
   },
   {
    "id": "p7",
