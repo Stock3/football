@@ -92,7 +92,9 @@
   {
    "id": "p13",
    "name": "Саня Д",
-   "active": true
+   "active": true,
+   "phone": "+380 98 918 44 24",
+   "tg": "doroshit_23"
   },
   {
    "id": "p14",
