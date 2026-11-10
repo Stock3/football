@@ -85,7 +85,9 @@
   {
    "id": "p12",
    "name": "Дімон",
-   "active": true
+   "active": true,
+   "phone": "+380 99 265 45 43",
+   "tg": "ttkachhhh"
   },
   {
    "id": "p13",
