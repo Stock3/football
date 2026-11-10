@@ -8,11 +8,12 @@
 - `data.json` — усі дані. Глядачі читають `data.json?t=…`; редактор (лише власник) входить з fine-grained GitHub-токеном (зберігається тільки в localStorage) і зберігає через GitHub Contents API (PUT з sha). Кожне збереження — коміт.
 - `bot/bot.mjs` + `.github/workflows/bot.yml` — Telegram-бот через GitHub Actions (push data.json, кожні 15 хв, workflow_dispatch). Секрет `TG_TOKEN`. Стан бота — `tg.json` (пише лише бот).
 - Стандартні налаштування й тексти бота — блок `/*DEF*/{…}/*/DEF*/` в index.html; бот парсить його як JSON, тож він має лишатися валідним JSON.
+- Погода (Open-Meteo: ECMWF, GFS, ICON) — блок `/*WX*/function(){…}/*/WX*/` в index.html: самодостатня ES5-функція (url, build, text, line). Бот виконує цей самий блок, тож формат прогнозу в боті й на сайті однаковий; у блоці не можна звертатися до решти сторінки.
 
 ## Схема data.json
 ```
 { "v":1,
-  "settings":{ price, card, cardName, bank, payFrom, org, bot, remind:{on,mode:"after"|"days",after,days[1–7],times["HH:MM"],quiet:{from,to},every,max,hour?}, thanks[], reminders[], hello, verdicts:{w[],l[],d[]}, time, place, gather[], cancel[] },
+  "settings":{ price, card, cardName, bank, payFrom, org, bot, remind:{on,mode:"after"|"days",after,days[1–7],times["HH:MM"],quiet:{from,to},every,max,hour?}, thanks[], reminders[], hello, verdicts:{w[],l[],d[]}, time, place, gather[], cancel[], city, lat, lon, rainWarn, sinoptik, meteo },
   "players":[{ id:"p1", name, active, num?, pos?:[≤2 кодів], foot?:"l"|"r", h?, bd?:"YYYY-MM-DD", quote?, phone?, tg? }],
   "games":[{ id:"g20261009", date, c?:[ids], y:[ids], b:[ids], gy, gb, sy?, sb?, paid?:[ids], x?:true, ann?:{gather?:ISO, cancel?:ISO} }] }
 ```

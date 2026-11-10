@@ -3,6 +3,7 @@
 //  1) забирає нові повідомлення боту (/start, /status, /stop) і привʼязує Telegram до гравця;
 //  2) дякує тим, кому щойно позначили оплату;
 //  3) нагадує боржникам (за розкладом з налаштувань або вручну з сайту);
+//  5) на /weather або «погода» відповідає прогнозом на найближчу пʼятницю (Open-Meteo, будь-кому);
 //  4) за кнопками на сайті оголошує «Збір є» / «Збір скасовано» гравцям конкретної гри (MODE=gather|cancel, GAME=id).
 //     Розклад: «через N днів після гри» або «у вибрані дні тижня», один чи кілька часів (Київ), тихі години.
 // Стан бота (хто підключений, кому що вже надіслано) лежить у tg.json поруч з data.json.
@@ -26,7 +27,11 @@ if (!TOKEN) { console.log("TG_TOKEN не задано: додайте секре
 
 const read = (f) => fs.readFileSync(path.join(ROOT, f), "utf8");
 const data = JSON.parse(read("data.json"));
-const DEF = JSON.parse(read("index.html").match(/\/\*DEF\*\/([\s\S]*?)\/\*\/DEF\*\//)[1]);
+const HTML = read("index.html");
+const DEF = JSON.parse(HTML.match(/\/\*DEF\*\/([\s\S]*?)\/\*\/DEF\*\//)[1]);
+// логіка прогнозу спільна з сайтом: блок /*WX*/…/*/WX*/ в index.html (ES5-функція без залежностей)
+const WX = new Function("return (" + HTML.match(/\/\*WX\*\/([\s\S]*?)\/\*\/WX\*\//)[1] + ")()")();
+const OM_API = process.env.OM_API || "https://api.open-meteo.com";
 const tgPath = path.join(ROOT, "tg.json");
 let tg = {};
 try { tg = JSON.parse(fs.readFileSync(tgPath, "utf8")); } catch {}
@@ -113,6 +118,28 @@ async function sendTo(pid, text) {
   return ok;
 }
 
+// ---------- погода ----------
+// Найближча пʼятниця за Києвом: у пʼятницю — сьогодні, із суботи — наступна.
+function nextFriday() {
+  const d = new Date(TODAY.date + "T00:00:00Z");
+  d.setUTCDate(d.getUTCDate() + ((5 - TODAY.wd + 7) % 7));
+  return d.toISOString().slice(0, 10);
+}
+let wxText = null; // один запит на запуск
+async function weatherText() {
+  if (wxText) return wxText;
+  try {
+    const r = await fetch(WX.url(S, OM_API));
+    if (!r.ok) throw new Error("HTTP " + r.status);
+    const w = WX.build(await r.json(), nextFriday(), S.time, S.rainWarn);
+    wxText = WX.text(w, { city: S.city, updated: TODAY.time, site: SITE });
+  } catch (e) {
+    console.log("Open-Meteo:", e.message);
+    return "Прогноз зараз недоступний 🙈 Спробуй трохи пізніше.";
+  }
+  return wxText;
+}
+
 // ---------- 1. вхідні повідомлення ----------
 function playerByChat(chatId) { return Object.keys(tg.chats).find((pid) => tg.chats[pid].id === chatId); }
 function playerByUsername(u) { if (!u) return null; u = u.toLowerCase(); return data.players.find((p) => p.tg && p.tg.toLowerCase() === u) || null; }
@@ -121,6 +148,7 @@ async function onMessage(m) {
   const text = (m.text || "").trim(), chatId = m.chat.id, uname = m.from?.username || "";
   const [cmd, arg] = text.split(/\s+/);
   const c = (cmd || "").toLowerCase().replace(/@.*$/, "");
+  if (c === "/weather" || /^погода/i.test(text)) return send(chatId, await weatherText()); // будь-кому, навіть не підключеним
   if (c === "/start") {
     let p = arg ? players[arg] : playerByUsername(uname);
     if (arg && !p) return send(chatId, `Не знайшов такого гравця 🤔 Відкрий свій профіль на сайті й натисни «Підключити Telegram-бота».${SITE ? "\n" + SITE : ""}`);
@@ -144,7 +172,7 @@ async function onMessage(m) {
     const v = vars(pid, list);
     return send(chatId, fill(`💸 ${v.name}, не оплачено за {debt}. Разом {sum} грн.\nКартка: {card} {cardName}${S.bank ? "\n{bank}" : ""}`, v));
   }
-  return send(chatId, "Я вмію: /status — перевірити оплату, /stop — не писати мені 🙂");
+  return send(chatId, "Я вмію: /status — перевірити оплату, /weather — погода на пʼятницю, /stop — не писати мені 🙂");
 }
 
 async function pollUpdates() {

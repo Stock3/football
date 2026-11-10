@@ -136,6 +136,13 @@ tr.det td{background:var(--sunk);white-space:normal;text-align:left;color:var(--
 .score .ys{color:var(--yel)} .score .bs{color:var(--blu)} .score .lose{opacity:.45}
 .score small{display:block;font-family:var(--f-body);font-size:11px;color:var(--muted);font-weight:500}
 .edit{background:none;border:0;color:var(--muted);font-size:13px;padding:4px}
+.wx p{margin:0}
+.wx-h{font-weight:600}
+.wx-d{font-size:14px}
+.wx-m{display:grid;grid-template-columns:auto 1fr;gap:3px 10px;font-size:14px;align-items:baseline}
+.wx-n{font-weight:600;color:var(--muted);font-size:12px}
+.wx-warn{font-weight:600;color:var(--loss)}
+.wxline{font-size:14px;font-weight:500}
 .match .plan{grid-column:1/-1;display:flex;flex-direction:column;gap:6px;min-width:0}
 .plan p{margin:0}
 .plan .who{font-size:14px;overflow-wrap:anywhere}
@@ -306,6 +313,7 @@ var DEF = /*DEF*/{
   "🧾 {name}, на звʼязку бухгалтерія Пʼятниці 5×5. Не бачу оплати за {debt}. {sum} грн на {card} — і ти знову чистий 🙏"
  ],
  "time":"21:00","place":"штучне поле Буковини",
+ "city":"Чернівці","lat":48.29,"lon":25.94,"rainWarn":90,"sinoptik":"https://sinoptik.ua/pohoda/chernivtsi","meteo":"https://meteo.ua/ua/91/chernovtsyi",
  "gather":[
   "⚽ {name}, футбол буде! {day}, {date}, {time}, {place}. Нас {count}: {list}. Чекаємо!",
   "✅ Збір є! {name}, {day}, {date}, о {time} — {place}. Склад ({count}): {list}. Бутси в рюкзак, відмазки в смітник 😎",
@@ -323,6 +331,79 @@ var DEF = /*DEF*/{
   "d":["нічия на полі, перемога в бухгалтерії","нічия, але гроші не нічия"]
  }
 }/*/DEF*/;
+/* Прогноз погоди з Open-Meteo: 3 моделі в одному запиті. Бот (bot/bot.mjs) бере цей блок звідси як є,
+   тож тут лише ES5 без залежностей від решти сторінки. */
+var WX = (/*WX*/function(){
+  var MODELS=[["ecmwf_ifs025","ECMWF"],["gfs_seamless","GFS"],["icon_seamless","ICON"]];
+  var VARS=["temperature_2m","apparent_temperature","precipitation_probability","precipitation","wind_speed_10m","weather_code"];
+  var DAYS=["Неділя","Понеділок","Вівторок","Середа","Четвер","Пʼятниця","Субота"];
+  var MON=["січня","лютого","березня","квітня","травня","червня","липня","серпня","вересня","жовтня","листопада","грудня"];
+  function url(s,base){
+    return (base||"https://api.open-meteo.com")+"/v1/forecast?latitude="+encodeURIComponent(s.lat)+"&longitude="+encodeURIComponent(s.lon)+
+      "&models="+MODELS.map(function(m){return m[0];}).join(",")+"&hourly="+VARS.join(",")+"&wind_speed_unit=ms&timezone=Europe%2FKyiv&forecast_days=10";
+  }
+  function num(v){return typeof v==="number"&&isFinite(v)?v:null;}
+  function med(a){a=a.filter(function(v){return v!=null;}).sort(function(x,y){return x-y;});return a.length?(a.length%2?a[(a.length-1)/2]:(a[a.length/2-1]+a[a.length/2])/2):null;}
+  /* json — відповідь Open-Meteo; date — "YYYY-MM-DD"; time — час гри "HH:MM"; warn — поріг ймовірності опадів, % */
+  function build(json,date,time,warn){
+    var h=(json&&json.hourly)||{}, t=h.time||[], hh=(/^(\d{1,2})/.exec(time||"")||[0,21])[1], at=date+"T"+("0"+(+hh)).slice(-2)+":00";
+    var gi=t.indexOf(at), di=[];
+    t.forEach(function(x,i){var hr=+x.slice(11,13); if(x.slice(0,10)===date&&hr>=8&&hr<=20)di.push(i);});
+    var models=MODELS.map(function(m){
+      function v(k,i){var a=h[k+"_"+m[0]];return a&&i>=0?num(a[i]):null;}
+      var r={name:m[1],ok:gi>=0&&v("temperature_2m",gi)!=null};
+      if(!r.ok)return r;
+      r.at={code:v("weather_code",gi),t:v("temperature_2m",gi),app:v("apparent_temperature",gi),pp:v("precipitation_probability",gi),wind:v("wind_speed_10m",gi)};
+      var day={t:[],pp:[],mm:0,wind:[]};
+      di.forEach(function(i){var x;if((x=v("temperature_2m",i))!=null)day.t.push(x);if((x=v("precipitation_probability",i))!=null)day.pp.push(x);if((x=v("precipitation",i))!=null)day.mm+=x;if((x=v("wind_speed_10m",i))!=null)day.wind.push(x);});
+      r.day=day; return r;
+    });
+    var ok=models.filter(function(m){return m.ok;}), all=function(k){var o=[];ok.forEach(function(m){o=o.concat(m.day[k]);});return o;};
+    var T=all("t"), P=all("pp"), Wd=all("wind");
+    var day=ok.length&&T.length?{tmin:Math.min.apply(null,T),tmax:Math.max.apply(null,T),pp:P.length?Math.max.apply(null,P):null,
+      mm:Math.max.apply(null,ok.map(function(m){return m.day.mm;})),wind:Wd.length?Math.max.apply(null,Wd):null}:null;
+    /* більшість моделей з даними: 2 з 3, з 2 — обидві */
+    var pv=ok.map(function(m){return m.at.pp;}).filter(function(v){return v!=null;}), votes=pv.filter(function(v){return v>=(+warn||90);}).length;
+    var byPp=ok.slice().sort(function(a,b){return (a.at.pp||0)-(b.at.pp||0);}), mid=byPp[Math.floor((byPp.length-1)/2)];
+    return {date:date,time:("0"+(+hh)).slice(-2)+":00",models:models,day:day,any:ok.length>0,warn:pv.length>0&&votes>pv.length/2,
+      med:ok.length?{code:mid.at.code,t:med(ok.map(function(m){return m.at.t;})),pp:med(pv),wind:med(ok.map(function(m){return m.at.wind;}))}:null};
+  }
+  function deg(v){if(v==null)return "?°";v=Math.round(v);return (v>0?"+":v<0?"−":"")+Math.abs(v)+"°";}
+  function pct(v){return v==null?"—%":Math.round(v)+"%";}
+  function ms(v){return v==null?"? м/с":Math.round(v)+" м/с";}
+  function mm(v){return String(Math.round(v*10)/10).replace(".",",");}
+  function icon(c,hour){
+    var night=hour>=19||hour<6;
+    if(c==null)return "❔"; if(c===0)return night?"🌙":"☀️"; if(c<=2)return night?"☁️":"🌤"; if(c===3)return "☁️"; if(c===45||c===48)return "🌫";
+    if(c>=51&&c<=57)return "🌦"; if((c>=61&&c<=67)||(c>=80&&c<=82))return "🌧"; if((c>=71&&c<=77)||c===85||c===86)return "🌨"; if(c>=95)return "⛈"; return "🌥";
+  }
+  function head(r,city){var d=new Date(r.date+"T00:00:00Z");return "🌦 "+DAYS[d.getUTCDay()]+", "+d.getUTCDate()+" "+MON[d.getUTCMonth()]+(city?" · "+city:"");}
+  function dayLine(r){
+    var d=r.day; if(!d)return "День: немає прогнозу";
+    var rain=(d.pp==null&&d.mm<0.05)||(d.pp===0&&d.mm<0.05)?"без опадів":(d.tmin<=0?"опади":"дощ")+" до "+pct(d.pp)+" ("+mm(d.mm)+" мм)";
+    return "День: "+deg(d.tmin).replace("°","")+"…"+deg(d.tmax)+", "+rain+", вітер до "+ms(d.wind);
+  }
+  function modelLine(m,hour,pad){
+    var n=pad?(m.name+"     ").slice(0,5)+" ":m.name+" ";
+    if(!m.ok)return n+"немає прогнозу";
+    return n+icon(m.at.code,hour)+" "+deg(m.at.t)+" (відч. "+deg(m.at.app)+") · "+pct(m.at.pp)+" · "+ms(m.at.wind);
+  }
+  /* повний текст (бот) */
+  function text(r,o){
+    var hour=+r.time.slice(0,2), L=[head(r,o.city),dayLine(r),"","О "+r.time+":"];
+    r.models.forEach(function(m){L.push(modelLine(m,hour,true));});
+    if(r.warn)L.push("","⚠️ Погода під питанням");
+    L.push((r.warn?"":"\n")+"Оновлено "+o.updated+(o.site?" · "+o.site:""));
+    return L.join("\n");
+  }
+  /* один рядок (картка гри): медіана моделей */
+  function line(r){
+    var m=r.med; if(!m)return "";
+    return icon(m.code,+r.time.slice(0,2))+" "+deg(m.t)+" · "+pct(m.pp)+" · "+ms(m.wind)+" о "+r.time+(r.warn?" ⚠️":"");
+  }
+  return {url:url,build:build,text:text,line:line,head:head,dayLine:dayLine,modelLine:modelLine,icon:icon};
+}/*/WX*/)();
+var WXS = {key:"",at:0,data:null,err:false,loading:false,upd:""};
 var TG = {chats:{}};
 var ui = {season:null, tab:"rating", sort:{k:"pct",d:-1}, open:null, gen:{sel:[],guests:0,pick:0,res:null}, form:null, players:null, login:null, profile:null, pedit:null, manage:false, inApp:false};
 var editor=false, busy=false, toastT=null, sha=null, loaded=false;
@@ -377,6 +458,35 @@ var DAYS=["неділя","понеділок","вівторок","середа",
 function gameVars(g,pid,s){
   return {name:pid?pname(pid):"Гравець",date:dmon(g.date),day:DAYS[new Date(g.date+"T00:00:00Z").getUTCDay()],time:s.time||"",place:s.place||"",
     count:gameCount(g),list:gameList(g),site:location.origin+location.pathname};
+}
+/* ---------- погода ---------- */
+function todayStr(){var d=new Date();return d.getFullYear()+"-"+pad2(d.getMonth()+1)+"-"+pad2(d.getDate());}
+/* найближча запланована гра: без рахунку, не скасована, не в минулому */
+function wxGame(){var t=todayStr();return sortedGames(S.games.filter(function(g){return !played(g)&&!g.x&&g.date>=t;}))[0]||null;}
+function kyivHM(){try{return new Intl.DateTimeFormat("uk-UA",{timeZone:"Europe/Kyiv",hour:"2-digit",minute:"2-digit",hourCycle:"h23"}).format(new Date());}catch(e){var d=new Date();return pad2(d.getHours())+":"+pad2(d.getMinutes());}}
+/* кеш у памʼяті на 30 хв; force — примусове оновлення (таймер) */
+function loadWX(force){
+  var s=SET(), k=s.lat+","+s.lon;
+  if(WXS.loading||(!force&&WXS.key===k&&Date.now()-WXS.at<30*60e3))return;
+  WXS.loading=true;
+  fetch(WX.url(s),{cache:"no-store"}).then(function(r){if(!r.ok)throw new Error("http "+r.status);return r.json();})
+    .then(function(j){WXS={key:k,at:Date.now(),data:j,err:false,loading:false,upd:kyivHM()};render();})
+    .catch(function(){WXS={key:k,at:Date.now(),data:null,err:true,loading:false,upd:""};render();});
+}
+function wxFor(g){var s=SET();return WXS.data&&WXS.key===s.lat+","+s.lon?WX.build(WXS.data,g.date,s.time,s.rainWarn):null;}
+function wxBlock(){
+  var g=wxGame(); if(!g)return "";
+  var s=SET(), r=wxFor(g), h='<section class="panel pad stack wx" aria-label="Погода на гру"><h2 class="h">Погода на гру</h2>';
+  if(!r)return h+'<p class="note">'+(WXS.err?"Прогноз недоступний":"Завантажую прогноз…")+'</p></section>';
+  var hour=+r.time.slice(0,2);
+  h+='<div><p class="wx-h">'+esc(WX.head(r,s.city))+'</p><p class="wx-d">'+esc(WX.dayLine(r))+'</p></div>'+
+    '<div><p class="note" style="margin:0 0 4px">О '+r.time+':</p><div class="wx-m">'+r.models.map(function(m){
+      return '<span class="wx-n">'+m.name+'</span><span>'+esc(WX.modelLine(m,hour,false).slice(m.name.length+1))+'</span>';}).join("")+'</div></div>'+
+    (r.warn?'<p class="wx-warn">⚠️ Погода під питанням</p>':'')+
+    '<div class="row"><span class="note">Оновлено '+esc(WXS.upd)+' · Open-Meteo</span><span class="row" style="gap:6px">'+
+      (s.sinoptik?'<a class="btn ghost small" href="'+esc(s.sinoptik)+'" target="_blank" rel="noopener">Sinoptik</a>':'')+
+      (s.meteo?'<a class="btn ghost small" href="'+esc(s.meteo)+'" target="_blank" rel="noopener">Meteo.ua</a>':'')+'</span></div></section>';
+  return h;
 }
 function fmtStamp(iso){var d=new Date(iso);return isNaN(d)?"":pad2(d.getDate())+"."+pad2(d.getMonth()+1)+" "+pad2(d.getHours())+":"+pad2(d.getMinutes());}
 function years(){var y={};S.games.forEach(function(g){y[g.date.slice(0,4)]=1;});return Object.keys(y).sort();}
@@ -581,7 +691,8 @@ function matchesView(){
 /* запланована / скасована гра: хто буде, оголошення */
 function planView(g){
   var ids=gameIds(g), n=gameCount(g), ann=g.ann||{}, ch=TG.chats||{};
-  var h='<div class="plan"><p class="who"><b>Буде: <span class="num">'+n+'/10</span></b>'+(n?' · '+esc(gameList(g)):' · поки нікого')+'</p>';
+  var wr=!g.x&&wxFor(g), wl=wr&&wr.any?WX.line(wr):"";
+  var h='<div class="plan">'+(wl?'<p class="wxline">'+esc(wl)+'</p>':'')+'<p class="who"><b>Буде: <span class="num">'+n+'/10</span></b>'+(n?' · '+esc(gameList(g)):' · поки нікого')+'</p>';
   var st=[]; if(ann.gather)st.push("📣 Збір оголошено "+fmtStamp(ann.gather)); if(ann.cancel)st.push("❌ Скасування надіслано "+fmtStamp(ann.cancel));
   if(st.length)h+='<p class="note">'+st.join(" · ")+'</p>';
   if(editor&&!g.x&&n>=10&&!ann.gather)h+='<p class="hint10">👍 Набралось 10 — оголосити збір?</p>';
@@ -947,6 +1058,13 @@ function settingsView(){
     '<p class="note">Підстановки: {name} {date} (13 листопада) {day} (пʼятниця) {time} {place} {count} {list} (імена через кому) {site}. Кілька варіантів — через рядок <b>---</b></p>'+
     ta("s-gather","Збір є ✅",s.gather,"",6)+ta("s-cancel","Збір скасовано ❌",s.cancel,"",6)+
     '<div class="row"><span class="row"><button class="btn ghost small" data-act="s-pv-g">Приклад «Збір є»</button><button class="btn ghost small" data-act="s-pv-c">Приклад «Скасовано»</button></span></div>'+(ui.previewG?'<p class="preview">'+esc(ui.previewG)+'</p>':'')+'</div>'+
+  '<div class="panel pad stack"><div><h2 class="h">Погода</h2><p class="sub">Прогноз Open-Meteo (ECMWF, GFS, ICON) на табло перед запланованою грою і в боті (/weather)</p></div>'+
+    '<div class="three"><label class="field">Місто<input type="text" id="s-city" value="'+esc(s.city)+'"></label>'+
+    '<label class="field">Широта<input type="number" step="0.01" id="s-lat" value="'+esc(s.lat)+'"></label>'+
+    '<label class="field">Довгота<input type="number" step="0.01" id="s-lon" value="'+esc(s.lon)+'"></label></div>'+
+    '<label class="field">Попередження «Погода під питанням», % <span class="hint">якщо більшість моделей дає опади з такою ймовірністю на час гри</span><input type="number" min="1" max="100" id="s-warn" value="'+esc(s.rainWarn)+'"></label>'+
+    '<div class="two"><label class="field">Посилання Sinoptik<input type="url" id="s-sin" value="'+esc(s.sinoptik)+'"></label>'+
+    '<label class="field">Посилання Meteo.ua<input type="url" id="s-met" value="'+esc(s.meteo)+'"></label></div></div>'+
   '<div class="panel pad stack"><div><h2 class="h">Telegram-бот</h2><p class="sub">Як створити бота і підключити його — у README</p></div>'+
     '<label class="field">Імʼя бота <span class="hint">без @, напр. friday55_bot</span><input type="text" id="s-bot" value="'+esc(s.bot)+'" autocapitalize="off" autocomplete="off"></label>'+
     '<label class="chk"><input type="checkbox" id="s-ron"'+(r.on?" checked":"")+'> Автоматичні нагадування</label>'+
@@ -984,12 +1102,15 @@ function readSets(){
     times:times.filter(function(t,i,a){return t&&a.indexOf(t)===i;}).sort(),quiet:{from:v("s-qfrom")||"",to:v("s-qto")||""},every:Math.max(1,num("s-every",2)),max:Math.max(1,num("s-max",3))});
   s.remind._bad=times.some(function(t){return !t||+t.slice(3)%15;});
   s.thanks=splitT(v("s-thanks")); s.reminders=splitT(v("s-rem")); s.hello=v("s-hello").trim();
-  s.time=v("s-time")||""; s.place=v("s-place").trim(); s.gather=splitT(v("s-gather")); s.cancel=splitT(v("s-cancel"));
+  s.time=v("s-time")||""; s.place=v("s-place").trim();
+  s.city=v("s-city").trim(); s.lat=num("s-lat",s.lat); s.lon=num("s-lon",s.lon); s.rainWarn=Math.min(100,Math.max(1,Math.round(num("s-warn",90)))); s.sinoptik=v("s-sin").trim(); s.meteo=v("s-met").trim(); s.gather=splitT(v("s-gather")); s.cancel=splitT(v("s-cancel"));
   s.verdicts={w:splitT(v("s-vw")),l:splitT(v("s-vl")),d:splitT(v("s-vd"))};
 }
 function saveSets(){
   readSets(); var s=ui.sets;
   if(!s.thanks.length||!s.reminders.length){toast("Потрібен хоча б один текст подяки й нагадування");return;}
+  if(!(Math.abs(s.lat)<=90&&Math.abs(s.lon)<=180)){toast("Погода: широта від −90 до 90, довгота від −180 до 180");return;}
+  if((s.sinoptik&&!/^https:\/\//.test(s.sinoptik))||(s.meteo&&!/^https:\/\//.test(s.meteo))){toast("Посилання на погоду мають починатися з https://");return;}
   if(!s.gather.length||!s.cancel.length){toast("Потрібен хоча б один текст «Збір є» і «Збір скасовано»");return;}
   if(s.bank&&!/^https:\/\//.test(s.bank)){toast("Посилання на оплату має починатися з https://");return;}
   var r=s.remind;
@@ -1066,11 +1187,12 @@ function render(){
   if(!editor&&ui.tab==="settings")ui.tab="rating";
   if(!editor)ui.manage=false;
   var prof=ui.profile, curTab=prof?"players":ui.tab;
+  if(wxGame())loadWX();
   var body=prof?profileView(prof):ui.tab==="matches"?matchesView():ui.tab==="gen"?genView():ui.tab==="pay"?payView():ui.tab==="settings"?settingsView():ui.tab==="players"?(ui.manage?playersView():cardsView()):ratingView(games);
   var pp=prof&&pmap()[prof]; document.title=pp?pp.name+" · Пʼятниця 5×5":"Пʼятниця 5×5";
   app.innerHTML='<div class="wrap">'+
     '<header class="top"><h1 class="brand"><span class="dot" aria-hidden="true"></span>Пʼятниця 5×5</h1>'+(editor?'<button class="btn" data-act="new-game">+ Гра</button>':'')+'</header>'+
-    (prof||["gen","players","pay","settings"].indexOf(ui.tab)>=0?"":board(games))+
+    (prof||["gen","players","pay","settings"].indexOf(ui.tab)>=0?"":board(games)+wxBlock())+
     (prof||["gen","players","pay","settings"].indexOf(ui.tab)<0?'<div class="row"><div class="chips" role="group" aria-label="Сезон">'+seasons+'</div></div>':"")+
     '<nav class="tabs" role="tablist">'+tabs.map(function(t){return '<button class="tab" role="tab" data-tab="'+t[0]+'" aria-selected="'+(curTab===t[0])+'">'+t[1]+'</button>';}).join("")+'</nav>'+
     body+foot()+'</div>'+formView()+loginView()+peditView();
@@ -1186,6 +1308,7 @@ function saveForm(){
   var c=cfgGet();
   route();
   var done=function(d){S=d; loaded=true; render(); loadTG();};
+  setInterval(function(){if(loaded&&wxGame())loadWX(true);},30*60e3);
   var fail=function(){ui.loadError=location.protocol==="file:"?"Сторінка відкрита як файл з компʼютера. Відкрийте її за посиланням GitHub Pages, тоді підтягнуться дані.":"Не вдалося завантажити data.json. Перевірте, що файл лежить поруч з index.html.";render();};
   render();
   if(c.token&&c.owner&&c.repo){
