@@ -239,6 +239,37 @@ a.more:hover{text-decoration:underline}
 .field textarea{resize:vertical;min-height:64px}
 .warn{color:var(--loss);font-size:12px}
 .two{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+
+/* payments */
+.cardbox{display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;background:var(--sunk);border-radius:12px;padding:12px 14px}
+.cardbox b{display:block;font-family:var(--f-display);font-size:22px;font-weight:500;letter-spacing:.04em}
+.debt{display:flex;justify-content:space-between;align-items:center;gap:10px;padding:9px 0;border-bottom:1px solid var(--line)}
+.debt:last-child{border-bottom:0}
+.debt small{display:block;color:var(--muted);font-size:12px}
+.debt .sum{font-family:var(--f-display);font-size:20px;color:var(--loss);white-space:nowrap}
+.pgame{padding:12px 0;border-top:1px solid var(--line);display:flex;flex-direction:column;gap:8px}
+.pgame .row{align-items:baseline}
+.pchips{display:flex;flex-wrap:wrap;gap:6px}
+.pchip{border:1px solid var(--line);border-radius:99px;padding:4px 10px;font-size:13px;font-weight:500;background:var(--surface);color:var(--ink);white-space:nowrap}
+.pchip.ok{background:var(--win);border-color:var(--win);color:#fff}
+.pchip.no{border-style:dashed;color:var(--muted)}
+button.pchip.chg{box-shadow:0 0 0 2px var(--yel)}
+.savebar{position:sticky;bottom:calc(10px + env(safe-area-inset-bottom,0px));display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;background:var(--btn);color:var(--btn-ink);border-radius:12px;padding:10px 12px;z-index:5}
+.savebar .btn{background:var(--btn-ink);color:var(--btn)}
+.savebar .btn.ghost{background:transparent;color:var(--btn-ink);border-color:var(--btn-ink)}
+.tgok{color:var(--win);font-size:12px;font-weight:600;white-space:nowrap}
+.tgno{color:var(--muted);font-size:12px;white-space:nowrap}
+.preview{white-space:pre-wrap;background:var(--sunk);border-radius:10px;padding:10px 12px;font-size:14px;margin:0}
+.field .hint{font-weight:400;font-size:12px}
+.chk{display:flex;gap:8px;align-items:center;font-size:14px;color:var(--ink)}
+.seg,.wdays{display:flex;flex-wrap:wrap;gap:6px 16px}
+.wdays{gap:6px 14px;padding-top:4px}
+.sched[data-mode="after"] .m-days,.sched[data-mode="days"] .m-after{display:none}
+.field input[type="time"]{width:auto;flex:1;max-width:140px}
+.tgbadge{font-size:12px;font-weight:400}
+.three{display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:10px}
+.two>*,.three>*{min-width:0}
+.field input,.field select,.field textarea{width:100%;min-width:0}
 </style>
 </head>
 <body>
@@ -252,6 +283,28 @@ var MON = ["січ","лют","бер","кві","тра","чер","лип","се�
 var MONG = ["січня","лютого","березня","квітня","травня","червня","липня","серпня","вересня","жовтня","листопада","грудня"];
 var POS = [["gk","Воротар"],["lb","Лівий захисник"],["rb","Правий захисник"],["cb","Центральний захисник"],["cm","Півзахисник"],["dm","Опорний півзахисник"],["am","Атакувальний півзахисник"],["st","Нападник"],["lw","Лівий вінгер"],["rw","Правий вінгер"]];
 var MS = [10,25,50,75,100,150,200,250,300,400,500];
+/* Стандартні налаштування оплати й тексти бота. Бот (bot/bot.mjs) читає цей блок звідси, тож він має лишатися валідним JSON між маркерами. */
+var DEF = /*DEF*/{
+ "price":81,"card":"","cardName":"","bank":"","payFrom":"","org":"","bot":"",
+ "remind":{"on":true,"mode":"after","after":1,"days":[1,3],"times":["12:00"],"quiet":{"from":"22:00","to":"09:00"},"every":2,"max":3},
+ "thanks":[
+  "✅ {name}, {sum} грн отримано! {date}, {score} — {verdict}. Дякуємо за гру, до пʼятниці ⚽",
+  "💸 Є контакт! {name}, оплату за {debt} зараховано. {verdict}. Бухгалтерія задоволена 🧾",
+  "🙌 {name}, кошти дійшли, ти в списку чесних людей. {date}: {score}, {verdict}. До зустрічі на полі!"
+ ],
+ "reminders":[
+  "👋 {name}, нагадую про оплату за {debt}. Разом {sum} грн.\nКартка: {card} {cardName}\nЯк скинеш, я сам скажу «дякую» 😉",
+  "⚽ {name}, мʼяч круглий, а борг — {sum} грн 😅\nЗа {debt}.\nКартка: {card} {cardName}",
+  "🧾 {name}, на звʼязку бухгалтерія Пʼятниці 5×5. Не бачу оплати за {debt}. {sum} грн на {card} — і ти знову чистий 🙏"
+ ],
+ "hello":"Привіт, {name}! Я бот Пʼятниці 5×5 ⚽ Скажу «дякую», коли оплату отримано, і нагадаю, якщо забудеш. Перевірити борги: /status",
+ "verdicts":{
+  "w":["ще й з перемогою 💪","перемога смакує ще краще","три очки в кишені"],
+  "l":["поразка, але оплата — це вже перемога","рахунок не наш, зате совість чиста"],
+  "d":["нічия на полі, перемога в бухгалтерії","нічия, але гроші не нічия"]
+ }
+}/*/DEF*/;
+var TG = {chats:{}};
 var ui = {season:null, tab:"rating", sort:{k:"pct",d:-1}, open:null, gen:{sel:[],guests:0,pick:0,res:null}, form:null, players:null, login:null, profile:null, pedit:null, manage:false, inApp:false};
 var editor=false, busy=false, toastT=null, sha=null, loaded=false;
 var app=document.getElementById("app");
@@ -321,6 +374,38 @@ function bdayInfo(bd){
   return {days:Math.round((n-t)/864e5),age:t.getFullYear()-b.getFullYear()-(before?1:0),turns:n.getFullYear()-b.getFullYear(),day:b.getDate(),mon:b.getMonth(),year:b.getFullYear()};
 }
 function hasNum(p){return p.num!=null&&p.num!=="";}
+/* ---------- payments ---------- */
+function SET(){var s=S.settings||{},o={};Object.keys(DEF).forEach(function(k){o[k]=s[k]!=null?s[k]:DEF[k];});o.remind=normRemind(s.remind);return o;}
+/* розклад нагадувань; старий формат {after,every,max,hour} працює без міграції: hour стає часом відправки (так само в bot.mjs) */
+function pad2(n){return String(n).padStart(2,"0");}
+function hm(t){var m=String(t==null?"":t).trim().match(/^(\d{1,2}):(\d{2})$/);return m&&+m[1]<24&&+m[2]<60?pad2(+m[1])+":"+m[2]:"";}
+function normRemind(src){
+  var r=JSON.parse(JSON.stringify(Object.assign({},DEF.remind,src||{})));
+  if(src&&!Array.isArray(src.times)&&src.hour!=null){r.times=[pad2(src.hour)+":00"];if(src.quiet==null)r.quiet=null;}
+  r.mode=r.mode==="days"?"days":"after";
+  r.days=(Array.isArray(r.days)?r.days:[]).map(Number).filter(function(d){return d>=1&&d<=7;});
+  r.times=(Array.isArray(r.times)?r.times:[]).map(hm).filter(function(t,i,a){return t&&a.indexOf(t)===i;}).sort();
+  r.quiet=r.quiet&&typeof r.quiet==="object"?{from:hm(r.quiet.from),to:hm(r.quiet.to)}:{from:"",to:""};
+  return r;
+}
+function tracked(g){var s=SET();return played(g)&&!!s.payFrom&&g.date>=s.payFrom;}
+function payers(g){var o=SET().org;return (g.y||[]).concat(g.b||[]).filter(function(id){return id!==o;});}
+function paidOf(g){return ui.paydraft&&ui.paydraft[g.id]?ui.paydraft[g.id]:(g.paid||[]);}
+function debts(){
+  var m={}; sortedGames(S.games.filter(tracked)).forEach(function(g){var pd=paidOf(g);payers(g).forEach(function(id){if(pd.indexOf(id)<0)(m[id]||(m[id]=[])).push(g);});});
+  return m;
+}
+function fmtCard(c){var d=String(c||"").replace(/\D/g,"");return d.length===16?d.replace(/(\d{4})(?=\d)/g,"$1 "):String(c||"");}
+function dmon(d){var p=d.split("-");return +p[2]+" "+MONG[+p[1]-1];}
+function debtPhrase(list){var ds=list.map(function(g){return dmon(g.date);});return (ds.length>1?"ігри ":"гру ")+(ds.length>1?ds.slice(0,-1).join(", ")+" і "+ds[ds.length-1]:ds[0]);}
+function fillT(t,v){return String(t).replace(/\{(\w+)\}/g,function(m,k){return v[k]!=null?v[k]:m;}).replace(/[ \t]+\n/g,"\n").replace(/ {2,}/g," ").trim();}
+function tgLink(p){return p&&p.tg?"https://t.me/"+encodeURIComponent(p.tg):"";}
+function botLink(id){var b=SET().bot;return b?"https://t.me/"+encodeURIComponent(b)+"?start="+encodeURIComponent(id):"";}
+function loadTG(){
+  var r=guessRepo(), c=cfgGet(), o=c.owner||r.owner, n=c.repo||r.repo;
+  var url=o&&n?"https://raw.githubusercontent.com/"+encodeURIComponent(o)+"/"+encodeURIComponent(n)+"/HEAD/tg.json?t="+Date.now():"tg.json?t="+Date.now();
+  fetch(url,{cache:"no-store"}).then(function(r){return r.ok?r.json():null;}).then(function(j){if(j&&j.chats){TG=j;render();}}).catch(function(){});
+}
 function onTeam(g,id){return (g.y||[]).indexOf(id)>=0?"y":(g.b||[]).indexOf(id)>=0?"b":null;}
 
 function stats(games){
@@ -352,13 +437,14 @@ function toast(msg){
 function save(next,okMsg,commitMsg){
   if(busy)return;
   var c=cfgGet(); if(!c.token){editor=false;render();toast("Увійдіть як редактор, щоб зберігати");return;}
+  if(S.settings&&next.settings===undefined)next.settings=S.settings;
   busy=true; render();
   var body={message:commitMsg||okMsg||"Оновлення статистики",content:b64enc(JSON.stringify(next,null,1)+"\n"),sha:sha};
   gh(c,"/contents/data.json",{method:"PUT",body:body}).then(function(r){
     if(!r.ok){return r.text().then(function(){throw new Error(ghError(r));});}
     return r.json();
   }).then(function(j){
-    sha=j.content&&j.content.sha; S=next; busy=false; ui.form=null; ui.players=null; ui.pedit=null; render();
+    sha=j.content&&j.content.sha; S=next; busy=false; ui.form=null; ui.players=null; ui.pedit=null; ui.paydraft=null; ui.sets=null; render();
     toast((okMsg||"Збережено")+". Сайт для всіх оновиться за 1–2 хв");
   }).catch(function(e){busy=false; render(); toast(e.message&&e.message.length>8?e.message:"Немає звʼязку з GitHub. Спробуйте ще раз");});
 }
@@ -375,8 +461,14 @@ function board(games){
     '<div class="side b"><span class="lbl">Сині</span><span class="big num">'+b+'</span></div>'+
     '<div class="bar" aria-hidden="true"><i style="width:'+(n?y/n*100:0)+'%;background:var(--yel)"></i><i style="width:'+(n?d/n*100:0)+'%;background:var(--draw)"></i><i style="width:'+(n?b/n*100:0)+'%;background:var(--blu)"></i></div>'+
     '<div class="facts"><span>Ігор: <b class="num">'+n+'</b></span><span>Голів за гру: <b class="num">'+(n?(goals/n).toFixed(1):"—")+'</b></span>'+
-    '<span>Найчастіше грав: <b>'+(top?esc(pname(top))+" ("+st[top].g+")":"—")+'</b></span><span>Остання гра: <b class="num">'+lastTxt+'</b></span>'+bdayLine()+'</div>'+
+    '<span>Найчастіше грав: <b>'+(top?esc(pname(top))+" ("+st[top].g+")":"—")+'</b></span><span>Остання гра: <b class="num">'+lastTxt+'</b></span>'+bdayLine()+debtLine()+'</div>'+
   '</section>';
+}
+function debtLine(){
+  if(!SET().payFrom)return "";
+  var d=debts(), ids=Object.keys(d); if(!ids.length)return '<span>💸 Усі розрахувалися</span>';
+  var n=0; ids.forEach(function(k){n+=d[k].length;});
+  return '<span>💸 Не оплачено: <button class="edit" style="padding:0;color:var(--loss);font-weight:600" data-tab="pay">'+n*SET().price+' грн ('+ids.length+' '+plural(ids.length,["гравець","гравці","гравців"])+')</button></span>';
 }
 /* ДН активних гравців у найближчі 7 днів */
 function bdayLine(){
@@ -519,7 +611,7 @@ function cardsView(){
   function card(p){
     var g=st[p.id]?st[p.id].g:0, pos=(p.pos||[]).map(posName).filter(Boolean).join(", ");
     return '<a class="pcard'+(p.active===false?" off":"")+'" href="#'+esc(p.id)+'"><span class="no num">'+(hasNum(p)?esc(p.num):"–")+'</span>'+
-      '<span style="min-width:0"><b>'+esc(p.name)+'</b><small>'+(pos?esc(pos):"Позиція не вказана")+'</small><small>'+g+' '+plural(g,["гра","гри","ігор"])+'</small></span></a>';
+      '<span style="min-width:0"><b>'+esc(p.name)+(TG.chats&&TG.chats[p.id]?' <span class="tgbadge" title="Підключено до Telegram-бота">🤖</span>':'')+'</b><small>'+(pos?esc(pos):"Позиція не вказана")+'</small><small>'+g+' '+plural(g,["гра","гри","ігор"])+'</small></span></a>';
   }
   var byName=function(a,b){return a.name.localeCompare(b.name,"uk");};
   var act=S.players.filter(function(p){return p.active!==false;}).sort(byName), off=S.players.filter(function(p){return p.active===false;}).sort(byName);
@@ -552,15 +644,25 @@ function profileView(id){
   if(pos.length)meta.push((pos.length>1?"Бажані позиції: ":"Бажана позиція: ")+'<b>'+esc(pos.join(", "))+'</b>');
   if(p.foot)meta.push('Ведуча нога: <b>'+(p.foot==="l"?"ліва":"права")+'</b>');
   if(p.h)meta.push('Зріст: <b>'+esc(p.h)+' см</b>');
+  if(p.phone)meta.push('Телефон: <a class="more" href="tel:'+esc(String(p.phone).replace(/[^\d+]/g,""))+'">'+esc(p.phone)+'</a>');
+  var tgU=p.tg||(TG.chats&&TG.chats[id]&&TG.chats[id].u)||"";
+  if(tgU)meta.push('Telegram: <a class="more" href="https://t.me/'+esc(encodeURIComponent(tgU))+'" target="_blank" rel="noopener">@'+esc(tgU)+'</a>');
   if(bi)meta.push('<b>'+bi.age+' '+plural(bi.age,["рік","роки","років"])+'</b> · '+bi.day+' '+MONG[bi.mon]+' '+bi.year+(bi.days===0?' · 🎂 сьогодні!':bi.days<=7?' · 🎂 через '+bi.days+' '+plural(bi.days,["день","дні","днів"]):''));
   var first=null; for(var i=0;i<all.length;i++)if(onTeam(all[i],id)){first=all[i];break;}
   if(first)meta.push('Перша гра: <b>'+fmtLong(first.date)+'</b>');
   var empty=!meta.length&&!p.quote;
+  var st=SET(), dl=debts()[id], payL="";
+  if(st.payFrom)payL='<p class="note" style="margin:8px 0 0">'+(dl?'💸 Не оплачено: <b style="color:var(--loss)">'+debtPhrase(dl)+' · '+dl.length*st.price+' грн</b> <button class="edit" data-tab="pay">До оплати →</button>':'✅ Боргів немає')+'</p>';
+  if(st.bot){
+    var ch=TG.chats&&TG.chats[id];
+    payL+='<p class="note" style="margin:4px 0 0">'+(ch?'🤖 Telegram-бот підключено':'🤖 <a class="more" href="'+esc(botLink(id))+'" target="_blank" rel="noopener">Підключити Telegram-бота</a> — писатиме про оплату')+
+      (editor&&!ch?' · <button class="edit" data-copy="'+esc(botLink(id))+'">Скопіювати посилання</button>':'')+'</p>';
+  }
   var head='<div class="panel pad stack">'+back+
     '<div class="prof-head"><div class="prof-no num">'+(hasNum(p)?esc(p.num):"–")+'</div>'+
     '<div style="flex:1;min-width:200px"><h2 class="prof-name">'+esc(p.name)+'</h2>'+(p.active===false?'<p class="sub">Більше не грає</p>':'')+
     (meta.length?'<div class="meta">'+meta.map(function(x){return '<span>'+x+'</span>';}).join("")+'</div>':'')+
-    (p.quote?'<p class="quote">«'+esc(p.quote)+'»</p>':'')+
+    (p.quote?'<p class="quote">«'+esc(p.quote)+'»</p>':'')+payL+
     (empty&&editor?'<p class="note">Профіль ще не заповнений.</p>':'')+'</div>'+
     (editor?'<button class="btn ghost small" data-act="pe-open">Редагувати</button>':'')+'</div></div>';
 
@@ -628,6 +730,8 @@ function peditView(){
     '<label class="field">Друга позиція<select id="e-pos2">'+opts(pos[1])+'</select></label></div>'+
     '<div class="two"><label class="field">Ведуча нога<select id="e-foot"><option value="">Не вказано</option><option value="l"'+(p.foot==="l"?" selected":"")+'>Ліва</option><option value="r"'+(p.foot==="r"?" selected":"")+'>Права</option></select></label>'+
     '<label class="field">Дата народження<input type="date" id="e-bd" value="'+esc(p.bd||"")+'"></label></div>'+
+    '<div class="two"><label class="field">Телефон<input type="tel" id="e-phone" value="'+esc(p.phone||"")+'" placeholder="+380…"></label>'+
+    '<label class="field">Telegram<input type="text" id="e-tg" value="'+esc(p.tg?"@"+p.tg:"")+'" placeholder="@username" autocapitalize="off" autocomplete="off"></label></div>'+
     '<label class="field">Цитата<textarea id="e-quote" maxlength="140" placeholder="До 140 символів">'+esc(p.quote||"")+'</textarea></label>'+
     '<div class="actions"><div></div><div><button class="btn ghost" data-act="close">Скасувати</button><button class="btn" data-act="pe-save"'+(busy?" disabled":"")+'>'+(busy?"Зберігаю…":"Зберегти")+'</button></div></div>'+
   '</div></div>';
@@ -637,19 +741,182 @@ function savePedit(){
   function v(id){var el=document.getElementById(id);return el?el.value:"";}
   var name=v("e-name").trim(), num=v("e-num").trim(), h=v("e-h").trim(), bd=v("e-bd"), foot=v("e-foot"), q=v("e-quote").trim();
   if(!name){toast("Вкажіть імʼя");return;}
+  var phone=v("e-phone").trim(), tgu=v("e-tg").trim().replace(/^(https?:\/\/)?(t\.me\/|telegram\.me\/)/i,"").replace(/^@/,"");
+  if(phone&&!/^\+?[\d\s()-]{9,20}$/.test(phone)){toast("Перевірте номер телефону");return;}
+  if(tgu&&!/^[A-Za-z0-9_]{5,32}$/.test(tgu)){toast("Telegram: імʼя користувача з 5–32 латинських літер, цифр або _");return;}
   if(num!==""&&!/^\d{1,2}$/.test(num)){toast("Номер: ціле число від 0 до 99");return;}
   if(h!==""&&!(/^\d{3}$/.test(h)&&+h>=120&&+h<=230)){toast("Зріст: від 120 до 230 см");return;}
   if(bd){var b=parseD(bd); if(!b||b>todayD()||b.getFullYear()<1940){toast("Перевірте дату народження");return;}}
   var pos=[v("e-pos1"),v("e-pos2")].filter(function(x,i,a){return x&&a.indexOf(x)===i;});
-  var KEYS=["id","name","active","num","pos","foot","h","bd","quote"];
+  var KEYS=["id","name","active","num","pos","foot","h","bd","quote","phone","tg"];
   var players=S.players.map(function(p){
     if(p.id!==f.id)return p;
     var n={id:p.id,name:name,active:p.active!==false};
-    if(num!=="")n.num=+num; if(pos.length)n.pos=pos; if(foot)n.foot=foot; if(h!=="")n.h=+h; if(bd)n.bd=bd; if(q)n.quote=q;
+    if(num!=="")n.num=+num; if(pos.length)n.pos=pos; if(foot)n.foot=foot; if(h!=="")n.h=+h; if(bd)n.bd=bd; if(q)n.quote=q; if(phone)n.phone=phone; if(tgu)n.tg=tgu;
     Object.keys(p).forEach(function(k){if(KEYS.indexOf(k)<0)n[k]=p[k];});
     return n;
   });
   save({v:S.v,players:players,games:S.games},"Профіль збережено","Профіль: "+name);
+}
+
+/* ---------- оплата ---------- */
+function payChanges(){
+  var n=0; if(!ui.paydraft)return 0;
+  S.games.forEach(function(g){var d=ui.paydraft[g.id]; if(!d)return; var o=g.paid||[];
+    payers(g).forEach(function(id){if((d.indexOf(id)>=0)!==(o.indexOf(id)>=0))n++;});});
+  return n;
+}
+function payView(){
+  var s=SET();
+  if(!s.payFrom)return '<div class="panel pad stack"><h2 class="h">Оплата</h2><p class="note">Облік оплат ще не увімкнено.'+(editor?' Вкажіть дату початку обліку у вкладці «Налаштування».':'')+'</p></div>';
+  var card=s.card?'<div class="cardbox"><div><span class="note">Картка'+(s.cardName?' · '+esc(s.cardName):'')+'</span><b class="num">'+esc(fmtCard(s.card))+'</b></div><button class="btn small" data-copy="'+esc(String(s.card).replace(/\s/g,""))+'">Скопіювати</button></div>':'';
+  var bank=s.bank?'<a class="more" href="'+esc(s.bank)+'" target="_blank" rel="noopener">Оплатити за посиланням →</a>':'';
+  var d=debts(), ids=Object.keys(d).sort(function(a,b){return d[b].length-d[a].length||pname(a).localeCompare(pname(b),"uk");});
+  var canRemind=editor&&!!s.bot;
+  var debtors=ids.length?ids.map(function(id){
+    var ch=TG.chats&&TG.chats[id];
+    return '<div class="debt"><div style="min-width:0"><a class="more" href="#'+esc(id)+'">'+esc(pname(id))+'</a><small>'+debtPhrase(d[id])+'</small></div>'+
+      '<div class="row" style="flex-wrap:nowrap">'+(s.bot?(ch?'<span class="tgok" title="Бот підключено">🤖 є</span>':'<span class="tgno" title="Бот не підключено">🤖 немає</span>'):'')+
+      (canRemind&&ch?'<button class="btn ghost small" data-remind="'+esc(id)+'">Нагадати</button>':'')+'<span class="sum num">'+d[id].length*s.price+'</span></div></div>';
+  }).join(""):'<p class="note">Усі розрахувалися 🎉</p>';
+  var total=0; ids.forEach(function(k){total+=d[k].length*s.price;});
+  var list=sortedGames(S.games.filter(tracked)).reverse(), lim=ui.payAll?list.length:6;
+  var games=list.slice(0,lim).map(function(g){
+    var pd=paidOf(g), py=payers(g), o=g.paid||[], f=fmtDate(g.date), ok=py.filter(function(id){return pd.indexOf(id)>=0;}).length;
+    var chips=py.map(function(id){
+      var on=pd.indexOf(id)>=0, chg=on!==(o.indexOf(id)>=0), lbl=(on?"✓ ":"")+esc(pname(id));
+      return editor?'<button class="pchip '+(on?"ok":"no")+(chg?" chg":"")+'" data-pay="'+g.id+'|'+esc(id)+'" aria-pressed="'+on+'">'+lbl+'</button>':'<span class="pchip '+(on?"ok":"no")+'">'+lbl+'</span>';
+    }).join("");
+    return '<div class="pgame"><div class="row"><span><b>'+f.day+' '+f.mon+'</b> <span class="note">'+g.sy+':'+g.sb+'</span></span><span class="note">Оплатили '+ok+' з '+py.length+(ok===py.length?' ✅':'')+'</span></div><div class="pchips">'+chips+'</div></div>';
+  }).join("");
+  var more=list.length>6?'<button class="edit" data-act="pay-all">'+(ui.payAll?"Показати менше":"Усі ігри ("+list.length+")")+'</button>':'';
+  var n=payChanges();
+  return '<div class="panel pad stack"><div><h2 class="h">Оплата</h2><p class="sub">'+s.price+' грн з гравця за гру · облік з '+fmtLong(s.payFrom)+'</p></div>'+card+bank+'</div>'+
+    '<div class="panel pad stack"><div class="row"><div><h2 class="h">Не оплатили</h2>'+(total?'<p class="sub">Разом '+total+' грн</p>':'')+'</div>'+
+      (canRemind&&ids.length?'<button class="btn ghost small" data-remind="*">Нагадати всім</button>':'')+'</div><div>'+debtors+'</div></div>'+
+    '<div class="panel pad stack"><div><h2 class="h">Ігри</h2><p class="sub">'+(editor?'Натисніть на гравця, щоб позначити оплату, потім «Зберегти»':'Зелені вже оплатили')+'</p></div>'+(games||'<p class="note">Ще немає зіграних ігор з початку обліку.</p>')+more+'</div>'+
+    (editor&&n?'<div class="savebar"><span>Змін: '+n+'</span><span class="row"><button class="btn ghost small" data-act="pay-cancel">Скасувати</button><button class="btn small" data-act="pay-save"'+(busy?" disabled":"")+'>'+(busy?"Зберігаю…":"Зберегти оплату")+'</button></span></div>':'');
+}
+function togglePay(gid,pid){
+  var g=S.games.filter(function(x){return x.id===gid;})[0]; if(!g)return;
+  ui.paydraft=ui.paydraft||{}; var d=(ui.paydraft[gid]||(g.paid||[])).slice(), i=d.indexOf(pid);
+  if(i>=0)d.splice(i,1); else d.push(pid); ui.paydraft[gid]=d; render();
+}
+function savePay(){
+  if(!ui.paydraft)return; var names=[], dates={};
+  var games=S.games.map(function(g){
+    var d=ui.paydraft[g.id]; if(!d)return g;
+    var py=payers(g), o=g.paid||[], n={}; Object.keys(g).forEach(function(k){n[k]=g[k];});
+    py.forEach(function(id){if(d.indexOf(id)>=0&&o.indexOf(id)<0){names.push(pname(id));dates[dmon(g.date)]=1;}});
+    var keep=(g.y||[]).concat(g.b||[]).filter(function(id){return d.indexOf(id)>=0;});
+    if(keep.length)n.paid=keep; else delete n.paid; return n;
+  });
+  var msg="Оплата"+(names.length?": "+names.join(", ")+" ("+Object.keys(dates).join(", ")+")":": зміни");
+  save({v:S.v,players:S.players,games:games},"Оплату збережено",msg);
+}
+function remindNow(pid){
+  var c=cfgGet(); if(!c.token){toast("Увійдіть як редактор");return;}
+  gh(c,"").then(function(r){return r.ok?r.json():{default_branch:"main"};}).then(function(repo){
+    return gh(c,"/actions/workflows/bot.yml/dispatches",{method:"POST",body:{ref:repo.default_branch||"main",inputs:{mode:"remind",player:pid==="*"?"":pid}}});
+  }).then(function(r){
+    if(r.status===204)toast(pid==="*"?"Бот надішле нагадування всім боржникам за хвилину-дві":"Бот надішле нагадування гравцю "+pname(pid)+" за хвилину-дві");
+    else if(r.status===403)toast("Токену бракує права Actions: Read and write. Додайте його в налаштуваннях токена на GitHub");
+    else if(r.status===404)toast("Не знайдено .github/workflows/bot.yml. Перевірте, що файл бота завантажено в репозиторій");
+    else toast("GitHub відповів помилкою "+r.status);
+  }).catch(function(){toast("Немає звʼязку з GitHub");});
+}
+
+/* ---------- налаштування (редактор) ---------- */
+function sampleVars(kind){
+  var s=SET(), d=debts(), id=Object.keys(d)[0], list=id?d[id]:[];
+  var g=list[list.length-1]||sortedGames(S.games.filter(played)).slice(-1)[0];
+  if(!id&&g)id=payers(g)[0]; if(!list.length&&g)list=[g];
+  var side=g?((g.y||[]).indexOf(id)>=0?"y":"b"):"y", my=g?(side==="y"?+g.sy:+g.sb):0, op=g?(side==="y"?+g.sb:+g.sy):0, r=my>op?"w":my<op?"l":"d";
+  var vd=s.verdicts&&s.verdicts[r]||[""];
+  return {name:id?pname(id):"Гравець",date:g?dmon(g.date):"",score:g?g.sy+":"+g.sb:"",verdict:vd[0],sum:list.length*s.price,debt:list.length?debtPhrase(list):"",
+    card:fmtCard(s.card)||"[картка]",cardName:s.cardName?"("+s.cardName+")":"",bank:s.bank||"",site:location.origin+location.pathname};
+}
+function splitT(v){return String(v||"").split(/\n\s*---\s*\n/).map(function(x){return x.trim();}).filter(Boolean);}
+var WD=["Пн","Вт","Ср","Чт","Пт","Сб","Нд"];
+/* хто підключив бота: дані з tg.json */
+function botPeople(s){
+  var act=S.players.filter(function(p){return p.active!==false;}).sort(function(a,b){return a.name.localeCompare(b.name,"uk");});
+  var ch=TG.chats||{}, n=act.filter(function(p){return ch[p.id];}).length;
+  var link=function(id){return s.bot?"https://t.me/"+encodeURIComponent(s.bot)+"?start="+encodeURIComponent(id):"";};
+  var rows=act.map(function(p){
+    var c=ch[p.id], noU=!p.tg?' · <span title="У профілі не вказано Telegram-username: підключиться лише за посиланням">немає username</span>':'';
+    return '<div class="debt"><div style="min-width:0"><a class="more" href="#'+esc(p.id)+'">'+esc(p.name)+'</a>'+
+      '<small>'+(c?'<span class="tgok">🤖 підключено'+(c.u?' @'+esc(c.u):'')+'</span>':'<span class="tgno">не підключено</span>')+'<span class="tgno">'+noU+'</span></small></div>'+
+      (!c&&s.bot?'<button class="btn ghost small" style="white-space:nowrap" data-copy="'+esc(link(p.id))+'" title="Скопіювати посилання для підключення">Скопіювати посилання</button>':'')+'</div>';
+  }).join("");
+  return '<div class="panel pad stack"><div><h2 class="h">Підключення до бота</h2><p class="sub">Підключено '+n+' з '+act.length+' активних гравців'+(s.bot?'':'. Вкажіть імʼя бота, щоб копіювати посилання')+'</p></div><div>'+rows+'</div></div>';
+}
+function settingsView(){
+  if(!editor)return '<div class="panel"><p class="empty">Налаштування доступні лише редактору.</p></div>';
+  var s=ui.sets||(ui.sets=JSON.parse(JSON.stringify(SET()))), r=s.remind;
+  var orgOpts='<option value="">Ніхто (платять усі)</option>'+S.players.slice().sort(function(a,b){return a.name.localeCompare(b.name,"uk");}).map(function(p){return '<option value="'+esc(p.id)+'"'+(s.org===p.id?" selected":"")+'>'+esc(p.name)+'</option>';}).join("");
+  function ta(id,label,arr,hint,rows){return '<label class="field">'+label+(hint?' <span class="hint">'+hint+'</span>':'')+'<textarea id="'+id+'" rows="'+(rows||8)+'">'+esc(arr.join("\n---\n"))+'</textarea></label>';}
+  var pv=ui.preview?'<p class="preview">'+esc(ui.preview)+'</p>':'';
+  return '<div class="panel pad stack"><div><h2 class="h">Оплата</h2><p class="sub">Видно всім на вкладці «Оплата»</p></div>'+
+    '<div class="three"><label class="field">Ціна з гравця, грн<input type="number" min="0" id="s-price" value="'+esc(s.price)+'"></label>'+
+    '<label class="field">Облік з дати<input type="date" id="s-from" value="'+esc(s.payFrom)+'"></label>'+
+    '<label class="field">Не платить (організатор)<select id="s-org">'+orgOpts+'</select></label></div>'+
+    '<p class="note">Ігри до дати початку обліку в оплаті не враховуються. Порожня дата вимикає облік.</p>'+
+    '<div class="two"><label class="field">Номер картки<input type="text" inputmode="numeric" id="s-card" value="'+esc(s.card)+'"></label>'+
+    '<label class="field">Отримувач<input type="text" id="s-cname" value="'+esc(s.cardName)+'" placeholder="Олексій М."></label></div>'+
+    '<label class="field">Посилання на оплату <span class="hint">необовʼязково, напр. банка Monobank</span><input type="url" id="s-bank" value="'+esc(s.bank)+'" placeholder="https://send.monobank.ua/jar/…"></label></div>'+
+  '<div class="panel pad stack"><div><h2 class="h">Telegram-бот</h2><p class="sub">Як створити бота і підключити його — у README</p></div>'+
+    '<label class="field">Імʼя бота <span class="hint">без @, напр. friday55_bot</span><input type="text" id="s-bot" value="'+esc(s.bot)+'" autocapitalize="off" autocomplete="off"></label>'+
+    '<label class="chk"><input type="checkbox" id="s-ron"'+(r.on?" checked":"")+'> Автоматичні нагадування</label>'+
+    '<div class="stack sched" id="s-sched" data-mode="'+r.mode+'">'+
+    '<div class="seg"><label class="chk"><input type="radio" name="s-rmode" value="after"'+(r.mode==="after"?" checked":"")+'> Через N днів після гри</label>'+
+    '<label class="chk"><input type="radio" name="s-rmode" value="days"'+(r.mode==="days"?" checked":"")+'> У вибрані дні тижня</label></div>'+
+    '<label class="field m-after">Через, днів після гри<input type="number" min="0" id="s-after" value="'+esc(r.after)+'"></label>'+
+    '<div class="field m-days">Дні тижня<div class="wdays">'+WD.map(function(d,i){return '<label class="chk"><input type="checkbox" data-wd="'+(i+1)+'"'+(r.days.indexOf(i+1)>=0?" checked":"")+'> '+d+'</label>';}).join("")+'</div></div>'+
+    '<label class="field">Час відправки (Київ) <span class="hint">крок 15 хв, кілька — через кому: 12:00, 19:30. Кожен час — окреме нагадування</span><input type="text" id="s-times" value="'+esc(ui.timesRaw!=null?ui.timesRaw:r.times.join(", "))+'" placeholder="12:00" autocomplete="off"></label>'+
+    '<div class="field">Тихі години <span class="hint">не надсилати з … до … (порожньо — без обмежень)</span><div class="row" style="justify-content:flex-start;flex-wrap:nowrap">'+
+      '<input type="time" step="900" id="s-qfrom" value="'+esc(r.quiet.from)+'"><span>—</span><input type="time" step="900" id="s-qto" value="'+esc(r.quiet.to)+'"></div></div>'+
+    '<div class="two"><label class="field">Повторювати кожні, днів<input type="number" min="1" id="s-every" value="'+esc(r.every)+'"></label>'+
+    '<label class="field">Максимум нагадувань<input type="number" min="1" id="s-max" value="'+esc(r.max)+'"></label></div>'+
+    '<p class="note">Бот запускається кожні 15 хв, а GitHub буває запізнюється, тож повідомлення може прийти на 5–30 хв пізніше вказаного часу. Якщо час припав на тихі години, нагадування чекає їх кінця (в межах того ж дня).</p></div></div>'+
+    botPeople(s)+
+  '<div class="panel pad stack"><div><h2 class="h">Тексти</h2><p class="sub">Кілька варіантів розділяйте рядком <b>---</b>, бот обирає випадковий. Підстановки: {name} {sum} {debt} {date} {score} {verdict} {card} {cardName} {bank} {site}</p></div>'+
+    ta("s-thanks","Подяка після оплати",s.thanks)+
+    ta("s-rem","Нагадування",s.reminders,"{debt} — «гру 6 листопада» або «ігри 30 жовтня і 6 листопада»")+
+    '<label class="field">Привітання при підключенні<textarea id="s-hello" rows="3">'+esc(s.hello)+'</textarea></label>'+
+    ta("s-vw","{verdict} після перемоги",s.verdicts.w,"",4)+ta("s-vl","{verdict} після поразки",s.verdicts.l,"",4)+ta("s-vd","{verdict} після нічиєї",s.verdicts.d,"",4)+
+    '<div class="row"><span class="row"><button class="btn ghost small" data-act="s-pv-t">Приклад подяки</button><button class="btn ghost small" data-act="s-pv-r">Приклад нагадування</button></span><button class="edit" data-act="s-reset">Повернути стандартні тексти</button></div>'+pv+'</div>'+
+  '<div class="row"><span></span><button class="btn" data-act="s-save"'+(busy?" disabled":"")+'>'+(busy?"Зберігаю…":"Зберегти налаштування")+'</button></div>';
+}
+function readSets(){
+  var s=ui.sets; if(!s)return; function v(id){var el=document.getElementById(id);return el?el.value:null;}
+  function num(id,def){var x=v(id);return x===null||x===""||isNaN(+x)?def:+x;}
+  if(v("s-price")===null)return;
+  s.price=num("s-price",s.price); s.payFrom=v("s-from")||""; s.org=v("s-org")||""; s.card=v("s-card").trim(); s.cardName=v("s-cname").trim(); s.bank=v("s-bank").trim();
+  s.bot=v("s-bot").trim().replace(/^(https?:\/\/)?t\.me\//i,"").replace(/^@/,"");
+  var mode=document.querySelector('input[name="s-rmode"]:checked'), days=[];
+  Array.prototype.forEach.call(document.querySelectorAll("[data-wd]"),function(el){if(el.checked)days.push(+el.dataset.wd);});
+  ui.timesRaw=v("s-times");
+  var raw=ui.timesRaw.split(/[,;\s]+/).filter(Boolean), times=raw.map(hm);
+  s.remind=Object.assign({},s.remind,{on:document.getElementById("s-ron").checked,mode:mode?mode.value:"after",after:Math.max(0,num("s-after",1)),days:days,
+    times:times.filter(function(t,i,a){return t&&a.indexOf(t)===i;}).sort(),quiet:{from:v("s-qfrom")||"",to:v("s-qto")||""},every:Math.max(1,num("s-every",2)),max:Math.max(1,num("s-max",3))});
+  s.remind._bad=times.some(function(t){return !t||+t.slice(3)%15;});
+  s.thanks=splitT(v("s-thanks")); s.reminders=splitT(v("s-rem")); s.hello=v("s-hello").trim();
+  s.verdicts={w:splitT(v("s-vw")),l:splitT(v("s-vl")),d:splitT(v("s-vd"))};
+}
+function saveSets(){
+  readSets(); var s=ui.sets;
+  if(!s.thanks.length||!s.reminders.length){toast("Потрібен хоча б один текст подяки й нагадування");return;}
+  if(s.bank&&!/^https:\/\//.test(s.bank)){toast("Посилання на оплату має починатися з https://");return;}
+  var r=s.remind;
+  if(r._bad){toast("Час відправки: формат ГГ:ХХ з кроком 15 хв, напр. 12:00, 19:30");return;}
+  if(r.on&&!r.times.length){toast("Вкажіть хоча б один час відправки");return;}
+  if(r.on&&r.mode==="days"&&!r.days.length){toast("Виберіть хоча б один день тижня");return;}
+  if(!r.quiet.from!==!r.quiet.to){toast("Тихі години: вкажіть обидва часи або залиште обидва порожніми");return;}
+  ui.timesRaw=null;
+  /* не губити поля налаштувань, яких форма не знає */
+  var old=S.settings||{}; s=Object.assign({},old,s); s.remind=Object.assign({},old.remind||{},r); delete s.remind._bad;
+  save({v:S.v,settings:s,players:S.players,games:S.games},"Налаштування збережено","Налаштування оплати й бота");
 }
 
 /* game form */
@@ -709,15 +976,16 @@ function render(){
   var season=curSeason(), games=sortedGames(S.games.filter(function(g){return played(g)&&inSeason(g);}));
   var ys=years(), seasons=ys.slice().reverse().map(function(y){return '<button class="chip" data-season="'+y+'" aria-pressed="'+(season===y)+'">'+y+'</button>';}).join("")+
     (ys.length>1||!ys.length?'<button class="chip" data-season="all" aria-pressed="'+(season==="all")+'">Весь час</button>':'');
-  var tabs=[["rating","Рейтинг"],["matches","Матчі"],["gen","Команди"],["players","Гравці"]];
+  var tabs=[["rating","Рейтинг"],["matches","Матчі"],["gen","Команди"],["players","Гравці"],["pay","Оплата"]].concat(editor?[["settings","Налаштування"]]:[]);
+  if(!editor&&ui.tab==="settings")ui.tab="rating";
   if(!editor)ui.manage=false;
   var prof=ui.profile, curTab=prof?"players":ui.tab;
-  var body=prof?profileView(prof):ui.tab==="matches"?matchesView():ui.tab==="gen"?genView():ui.tab==="players"?(ui.manage?playersView():cardsView()):ratingView(games);
+  var body=prof?profileView(prof):ui.tab==="matches"?matchesView():ui.tab==="gen"?genView():ui.tab==="pay"?payView():ui.tab==="settings"?settingsView():ui.tab==="players"?(ui.manage?playersView():cardsView()):ratingView(games);
   var pp=prof&&pmap()[prof]; document.title=pp?pp.name+" · Пʼятниця 5×5":"Пʼятниця 5×5";
   app.innerHTML='<div class="wrap">'+
     '<header class="top"><h1 class="brand"><span class="dot" aria-hidden="true"></span>Пʼятниця 5×5</h1>'+(editor?'<button class="btn" data-act="new-game">+ Гра</button>':'')+'</header>'+
-    (prof||ui.tab==="gen"||ui.tab==="players"?"":board(games))+
-    (prof||(ui.tab!=="gen"&&ui.tab!=="players")?'<div class="row"><div class="chips" role="group" aria-label="Сезон">'+seasons+'</div></div>':"")+
+    (prof||["gen","players","pay","settings"].indexOf(ui.tab)>=0?"":board(games))+
+    (prof||["gen","players","pay","settings"].indexOf(ui.tab)<0?'<div class="row"><div class="chips" role="group" aria-label="Сезон">'+seasons+'</div></div>':"")+
     '<nav class="tabs" role="tablist">'+tabs.map(function(t){return '<button class="tab" role="tab" data-tab="'+t[0]+'" aria-selected="'+(curTab===t[0])+'">'+t[1]+'</button>';}).join("")+'</nav>'+
     body+foot()+'</div>'+formView()+loginView()+peditView();
 }
@@ -735,7 +1003,10 @@ app.addEventListener("click",function(e){
   var t=e.target.closest("button,[data-open],[data-act]"); if(!t)return;
   var ds=t.dataset;
   if(ds.season){ui.season=ds.season;ui.open=null;render();return;}
-  if(ds.tab){ui.tab=ds.tab;ui.manage=false;clearHash();render();return;}
+  if(ds.tab){if(ui.tab==="settings")readSets(); ui.tab=ds.tab;ui.manage=false;ui.preview=null;clearHash();render();window.scrollTo(0,0);return;}
+  if(ds.pay){var pp=ds.pay.split("|");togglePay(pp[0],pp[1]);return;}
+  if(ds.remind){remindNow(ds.remind);return;}
+  if(ds.copy!=null){var txt=ds.copy;(navigator.clipboard?navigator.clipboard.writeText(txt):Promise.reject()).then(function(){toast("Скопійовано");}).catch(function(){window.prompt("Скопіюйте:",txt);});return;}
   if(ds.sort){var k=ds.sort; ui.sort=ui.sort.k===k?{k:k,d:-ui.sort.d}:{k:k,d:k==="name"?1:-1}; render();return;}
   if(ds.open){ui.open=ui.open===ds.open?null:ds.open;render();return;}
   if(ds.edit){var g=S.games.filter(function(x){return x.id===ds.edit;})[0]; if(g)openForm(g); return;}
@@ -752,9 +1023,15 @@ app.addEventListener("click",function(e){
     case "manage-off": ui.manage=false; ui.players=null; render(); break;
     case "pe-open": if(ui.profile)openPedit(ui.profile); break;
     case "pe-save": savePedit(); break;
+    case "pay-save": savePay(); break;
+    case "pay-cancel": ui.paydraft=null; render(); break;
+    case "pay-all": ui.payAll=!ui.payAll; render(); break;
+    case "s-save": saveSets(); break;
+    case "s-reset": readSets(); ui.sets.thanks=DEF.thanks.slice(); ui.sets.reminders=DEF.reminders.slice(); ui.sets.hello=DEF.hello; ui.sets.verdicts=JSON.parse(JSON.stringify(DEF.verdicts)); ui.preview=null; render(); toast("Стандартні тексти повернуто. Не забудьте зберегти"); break;
+    case "s-pv-t": case "s-pv-r": readSets(); var sv=sampleVars(), arr=a==="s-pv-t"?ui.sets.thanks:ui.sets.reminders; var so=ui.sets; sv.sum=sv.sum/SET().price*so.price; sv.card=fmtCard(so.card)||"[картка]"; sv.cardName=so.cardName?"("+so.cardName+")":""; sv.verdict=(so.verdicts.w[0]||""); ui.preview=arr.length?fillT(arr[Math.floor(Math.random()*arr.length)],sv):"Немає текстів"; render(); break;
     case "login": var gr=guessRepo(), cc=cfgGet(); ui.login={owner:cc.owner||gr.owner,repo:cc.repo||gr.repo}; render(); var lt=document.getElementById(ui.login.owner?"l-token":"l-owner"); if(lt)lt.focus(); break;
     case "l-go": doLogin(); break;
-    case "logout": cfgSet(null); editor=false; sha=null; ui.manage=false; ui.pedit=null; render(); toast("Ви вийшли. Токен видалено з цього браузера"); break;
+    case "logout": cfgSet(null); editor=false; sha=null; ui.manage=false; ui.pedit=null; ui.paydraft=null; ui.sets=null; render(); toast("Ви вийшли. Токен видалено з цього браузера"); break;
     case "g-plus": ui.gen.guests++; ui.gen.res=null; render(); break;
     case "g-minus": ui.gen.guests=Math.max(0,ui.gen.guests-1); ui.gen.res=null; render(); break;
     case "gen-clear": ui.gen.sel=[]; ui.gen.guests=0; ui.gen.res=null; render(); break;
@@ -786,6 +1063,7 @@ app.addEventListener("input",function(e){
 app.addEventListener("change",function(e){
   var t=e.target;
   if(t.dataset.pact!=null&&ui.players){ui.players[+t.dataset.pact].active=t.checked;render();}
+  if(t.name==="s-rmode"){var sc=document.getElementById("s-sched");if(sc)sc.setAttribute("data-mode",t.value);}
 });
 function saveForm(){
   readForm(); var f=ui.form;
@@ -799,6 +1077,8 @@ function saveForm(){
   var games=S.games.filter(function(x){return x.id!==f.id;});
   var id=f.id||("g"+f.date.replace(/-/g,"")); while(!f.id&&games.some(function(x){return x.id===id;}))id+="b";
   var g={id:id,date:f.date,y:y,b:b,gy:f.gy,gb:f.gb}; if(hasY){g.sy=+f.sy;g.sb=+f.sb;}
+  var old=f.id&&S.games.filter(function(x){return x.id===f.id;})[0];
+  if(old&&old.paid){var kp=old.paid.filter(function(id){return used.indexOf(id)>=0;}); if(kp.length)g.paid=kp;}
   games.push(g); games=sortedGames(games);
   if(hasY||ui.tab==="matches")ui.season=f.date.slice(0,4);
   save({v:S.v,players:players,games:games},hasY?"Гру збережено":"Гру збережено без рахунку","Гра "+f.date+(hasY?" "+g.sy+":"+g.sb:" (без рахунку)"));
@@ -808,7 +1088,7 @@ function saveForm(){
 (function boot(){
   var c=cfgGet();
   route();
-  var done=function(d){S=d; loaded=true; render();};
+  var done=function(d){S=d; loaded=true; render(); loadTG();};
   var fail=function(){ui.loadError=location.protocol==="file:"?"Сторінка відкрита як файл з компʼютера. Відкрийте її за посиланням GitHub Pages, тоді підтягнуться дані.":"Не вдалося завантажити data.json. Перевірте, що файл лежить поруч з index.html.";render();};
   render();
   if(c.token&&c.owner&&c.repo){
