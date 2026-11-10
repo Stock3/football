@@ -75,7 +75,7 @@
   {
    "id": "p10",
    "name": "Ярік",
-   "active": true
+   "active": false
   },
   {
    "id": "p11",
@@ -155,7 +155,7 @@
   {
    "id": "p23",
    "name": "Олексій",
-   "active": true
+   "active": false
   },
   {
    "id": "p24",
