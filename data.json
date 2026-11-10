@@ -104,7 +104,9 @@
   {
    "id": "p15",
    "name": "Льошка",
-   "active": true
+   "active": true,
+   "phone": "+380 97 669 12 04",
+   "tg": "X5_REVCHIK"
   },
   {
    "id": "p16",
