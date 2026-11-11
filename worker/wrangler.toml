@@ -1,0 +1,21 @@
+# Telegram-бот «Пʼятниця 5×5» — Cloudflare Worker. Адреса: https://bot.shtuchka.workers.dev
+# Секрети (Cloudflare → Workers & Pages → bot → Settings → Variables and Secrets), у коді їх немає:
+#   TG_TOKEN  — токен бота від @BotFather
+#   GH_TOKEN  — fine-grained GitHub-токен лише на Stock3/football, Contents: Read and write
+#   TG_SECRET — довільний довгий рядок; ним Telegram підписує webhook, ним же відкривається /setup
+name = "bot"
+main = "src/index.js"
+compatibility_date = "2026-10-01"
+workers_dev = true
+
+[vars]
+GH_REPO = "Stock3/football"
+GH_BRANCH = "main"
+SITE_ORIGIN = "https://stock3.github.io"
+
+[triggers]
+crons = ["*/15 * * * *"]
+
+# логи в Cloudflare → Workers & Pages → bot → Logs
+[observability]
+enabled = true

@@ -6,14 +6,19 @@
 - GitHub Pages, публічний репо. Без збірки, без фреймворків, без залежностей.
 - `index.html` — увесь застосунок: один файл, vanilla JS (ES5-стиль: `var`, `function`), CSS-токени для світлої/темної теми. Шрифти: Oswald (заголовки) + Golos Text. Кольори команд: жовті vs сині.
 - `data.json` — усі дані. Глядачі читають `data.json?t=…`; редактор (лише власник) входить з fine-grained GitHub-токеном (зберігається тільки в localStorage) і зберігає через GitHub Contents API (PUT з sha). Кожне збереження — коміт.
-- `bot/bot.mjs` + `.github/workflows/bot.yml` — Telegram-бот через GitHub Actions (push data.json, кожні 15 хв, workflow_dispatch). Секрет `TG_TOKEN`. Стан бота — `tg.json` (пише лише бот).
+- `worker/` — Telegram-бот на Cloudflare Workers (адреса https://bot.shtuchka.workers.dev), без npm-залежностей, деплой — Cloudflare Workers Builds з GitHub (root `worker`). Власного сховища немає: data.json, index.html (DEF) і tg.json читає/пише через GitHub Contents API (tg.json — з sha, при 409 перечитує й застосовує операції ще раз).
+  - `src/core.js` — уся логіка (чисті функції: дані + стан + час → повідомлення й операції стану); `src/index.js` — мережа: POST /tg (webhook, секрет X-Telegram-Bot-Api-Secret-Token), POST /notify (кнопки сайту; Bearer-токен редактора, пускає лише з permissions.push), GET /setup?key=TG_SECRET, GET /health, cron */15 (нагадування за розкладом + подяки-страховка).
+  - Секрети в Cloudflare: TG_TOKEN, GH_TOKEN, TG_SECRET. Змінні — у `worker/wrangler.toml`. Токени ніколи не логувати.
+  - Тести: `node --test worker/test/` (моки Telegram/GitHub/Open-Meteo). Перевірка збірки: `npx wrangler deploy --dry-run` у `worker/`.
+  - Стан бота — `tg.json` (пише лише бот): {chats, sent, slots}.
+- Сайт викликає бота через `settings.worker` + `/notify` ({mode: thanks|remind|gather|cancel, player?, game?}).
 - Стандартні налаштування й тексти бота — блок `/*DEF*/{…}/*/DEF*/` в index.html; бот парсить його як JSON, тож він має лишатися валідним JSON.
-- Погода (Open-Meteo: ECMWF, GFS, ICON) — блок `/*WX*/function(){…}/*/WX*/` в index.html: самодостатня ES5-функція (url, build, text, line). Бот виконує цей самий блок, тож формат прогнозу в боті й на сайті однаковий; у блоці не можна звертатися до решти сторінки.
+- Погода (Open-Meteo: ECMWF, GFS, ICON) — блок `/*WX*/function(){…}/*/WX*/` в index.html: самодостатня ES5-функція (url, build, text, line). Workers не дозволяють eval, тому `worker/src/wx.js` — автоматична копія блоку: після зміни блоку запустити `node worker/sync-wx.mjs` (тест падає, якщо копія розійшлася). У блоці не можна звертатися до решти сторінки.
 
 ## Схема data.json
 ```
 { "v":1,
-  "settings":{ price, card, cardName, bank, payFrom, org, bot, remind:{on,mode:"after"|"days",after,days[1–7],times["HH:MM"],quiet:{from,to},every,max,hour?}, thanks[], reminders[], hello, verdicts:{w[],l[],d[]}, time, place, gather[], cancel[], city, lat, lon, rainWarn, sinoptik, meteo },
+  "settings":{ price, card, cardName, bank, payFrom, org, bot, worker, remind:{on,mode:"after"|"days",after,days[1–7],times["HH:MM"],quiet:{from,to},every,max,hour?}, thanks[], reminders[], hello, verdicts:{w[],l[],d[]}, time, place, gather[], cancel[], city, lat, lon, rainWarn, sinoptik, meteo },
   "players":[{ id:"p1", name, active, num?, pos?:[≤2 кодів], foot?:"l"|"r", h?, bd?:"YYYY-MM-DD", quote?, phone?, tg? }],
   "games":[{ id:"g20261009", date, c?:[ids], y:[ids], b:[ids], gy, gb, sy?, sb?, paid?:[ids], x?:true, ann?:{gather?:ISO, cancel?:ISO} }] }
 ```

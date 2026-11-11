@@ -300,7 +300,7 @@ var POS = [["gk","Воротар"],["lb","Лівий захисник"],["rb","�
 var MS = [10,25,50,75,100,150,200,250,300,400,500];
 /* Стандартні налаштування оплати й тексти бота. Бот (bot/bot.mjs) читає цей блок звідси, тож він має лишатися валідним JSON між маркерами. */
 var DEF = /*DEF*/{
- "price":81,"card":"","cardName":"","bank":"","payFrom":"","org":"","bot":"",
+ "price":81,"card":"","cardName":"","bank":"","payFrom":"","org":"","bot":"","worker":"https://bot.shtuchka.workers.dev",
  "remind":{"on":true,"mode":"after","after":1,"days":[1,3],"times":["12:00"],"quiet":{"from":"22:00","to":"09:00"},"every":2,"max":3},
  "thanks":[
   "✅ {name}, {sum} грн отримано! {date}, {score} — {verdict}. Дякуємо за гру, до пʼятниці ⚽",
@@ -574,7 +574,7 @@ function toast(msg){
   var t=document.querySelector(".toast"); if(!t){t=document.createElement("div");t.className="toast";t.setAttribute("role","status");document.body.appendChild(t);}
   t.textContent=msg; t.hidden=false; clearTimeout(toastT); toastT=setTimeout(function(){t.hidden=true;},3200);
 }
-function save(next,okMsg,commitMsg){
+function save(next,okMsg,commitMsg,after){
   if(busy)return;
   var c=cfgGet(); if(!c.token){editor=false;render();toast("Увійдіть як редактор, щоб зберігати");return;}
   if(S.settings&&next.settings===undefined)next.settings=S.settings;
@@ -586,6 +586,7 @@ function save(next,okMsg,commitMsg){
   }).then(function(j){
     sha=j.content&&j.content.sha; S=next; busy=false; ui.form=null; ui.players=null; ui.pedit=null; ui.paydraft=null; ui.sets=null; render();
     toast((okMsg||"Збережено")+". Сайт для всіх оновиться за 1–2 хв");
+    if(after)after();
   }).catch(function(e){busy=false; render(); toast(e.message&&e.message.length>8?e.message:"Немає звʼязку з GitHub. Спробуйте ще раз");});
 }
 
@@ -593,7 +594,6 @@ function save(next,okMsg,commitMsg){
 function board(games){
   var y=0,b=0,d=0,goals=0; games.forEach(function(g){var a=+g.sy,c=+g.sb;goals+=a+c;if(a>c)y++;else if(c>a)b++;else d++;});
   var n=games.length, last=games[games.length-1];
-  var st=stats(games).players, top=null; Object.keys(st).forEach(function(id){if(!top||st[id].g>st[top].g)top=id;});
   var lastTxt=last?(function(){var f=fmtDate(last.date);return f.day+" "+f.mon+" · "+last.sy+":"+last.sb;})():"—";
   return '<section class="board" aria-label="Підсумок сезону">'+
     '<div class="side y"><span class="lbl">Жовті</span><span class="big num">'+y+'</span></div>'+
@@ -601,14 +601,16 @@ function board(games){
     '<div class="side b"><span class="lbl">Сині</span><span class="big num">'+b+'</span></div>'+
     '<div class="bar" aria-hidden="true"><i style="width:'+(n?y/n*100:0)+'%;background:var(--yel)"></i><i style="width:'+(n?d/n*100:0)+'%;background:var(--draw)"></i><i style="width:'+(n?b/n*100:0)+'%;background:var(--blu)"></i></div>'+
     '<div class="facts"><span>Ігор: <b class="num">'+n+'</b></span><span>Голів за гру: <b class="num">'+(n?(goals/n).toFixed(1):"—")+'</b></span>'+
-    '<span>Найчастіше грав: <b>'+(top?esc(pname(top))+" ("+st[top].g+")":"—")+'</b></span><span>Остання гра: <b class="num">'+lastTxt+'</b></span>'+bdayLine()+debtLine()+'</div>'+
+    '<span>Остання гра: <b class="num">'+lastTxt+'</b></span>'+nextLine()+bdayLine()+'</div>'+
   '</section>';
 }
-function debtLine(){
-  if(!SET().payFrom)return "";
-  var d=debts(), ids=Object.keys(d); if(!ids.length)return '<span>💸 Усі розрахувалися</span>';
-  var n=0; ids.forEach(function(k){n+=d[k].length;});
-  return '<span>💸 Не оплачено: <button class="edit" style="padding:0;color:var(--loss);font-weight:600" data-tab="pay">'+n*SET().price+' грн ('+ids.length+' '+plural(ids.length,["гравець","гравці","гравців"])+')</button></span>';
+/* найближча запланована гра; якщо її немає — найближча пʼятниця (у пʼятницю до часу гри — сьогодні) */
+var WDS=["нд","пн","вт","ср","чт","пт","сб"];
+function nextLine(){
+  var g=wxGame(), t=SET().time||"21:00", d;
+  if(g)d=new Date(g.date+"T12:00:00");
+  else{d=new Date(); var now=pad2(d.getHours())+":"+pad2(d.getMinutes()); if(d.getDay()===5&&now>=t)d.setDate(d.getDate()+1); while(d.getDay()!==5)d.setDate(d.getDate()+1);}
+  return '<span>Наступна гра: <b class="num">'+WDS[d.getDay()]+' '+d.getDate()+' '+MON[d.getMonth()]+', '+esc(t)+'</b>'+(g?' · буде <b class="num">'+gameCount(g)+'/10</b>':'')+'</span>';
 }
 /* ДН активних гравців у найближчі 7 днів */
 function bdayLine(){
@@ -705,19 +707,20 @@ function planView(g){
   }
   return h+'</div>';
 }
-function dispatch(inputs){
-  var c=cfgGet(); if(!c.token){toast("Увійдіть як редактор");return Promise.resolve(false);}
-  return gh(c,"").then(function(r){return r.ok?r.json():{default_branch:"main"};}).then(function(repo){
-    return gh(c,"/actions/workflows/bot.yml/dispatches",{method:"POST",body:{ref:repo.default_branch||"main",inputs:inputs}});
-  }).then(function(r){
-    if(r.status===204)return true;
-    if(r.status===403)toast("Токену бракує права Actions: Read and write. Додайте його в налаштуваннях токена на GitHub");
-    else if(r.status===404)toast("Не знайдено .github/workflows/bot.yml. Перевірте, що файл бота завантажено в репозиторій");
-    else if(r.status===422)toast("Workflow бота застарів: оновіть .github/workflows/bot.yml з репозиторію");
-    else toast("GitHub відповів помилкою "+r.status);
-    return false;
-  }).catch(function(){toast("Немає звʼязку з GitHub");return false;});
+/* бот на Cloudflare Worker: POST /notify з GitHub-токеном редактора (Worker перевіряє право запису в репозиторій) */
+function notify(body){
+  var c=cfgGet(), w=String(SET().worker||"").replace(/\/+$/,"");
+  if(!c.token){toast("Увійдіть як редактор");return Promise.resolve(null);}
+  if(!w){toast("Вкажіть адресу бота в Налаштуваннях");return Promise.resolve(null);}
+  return fetch(w+"/notify",{method:"POST",headers:{"Authorization":"Bearer "+c.token,"Content-Type":"application/json"},body:JSON.stringify(body)}).then(function(r){
+    if(r.status===401||r.status===403){toast("Токен не має прав на запис");return null;}
+    return r.json().catch(function(){return {};}).then(function(j){
+      if(!r.ok||!j.ok){toast("Бот: "+(j.error||"помилка "+r.status));return null;}
+      j.sent=j.sent||[]; j.missing=j.missing||[]; return j;
+    });
+  }).catch(function(){toast("Бот недоступний. Перевірте адресу бота в Налаштуваннях");return null;});
 }
+function notifyMsg(j){return "Надіслано: "+j.sent.length+(j.missing.length?". Не підключені: "+j.missing.join(", "):"");}
 /* «Збір є» / «Збір скасовано»: бот пише гравцям гри, сайт записує ann (і x для скасування) */
 function announceGame(kind,gid){
   var g=S.games.filter(function(x){return x.id===gid;})[0]; if(!g||busy||ui.annBusy)return;
@@ -726,8 +729,8 @@ function announceGame(kind,gid){
   if(kind==="gather"&&g.x){if(!window.confirm("Гру "+d+" скасовано. Оголосити збір і зняти скасування?"))return;}
   else if(ann[kind]&&!window.confirm((kind==="gather"?"Збір уже оголошували ":"Скасування вже надсилали ")+fmtStamp(ann[kind])+". Надіслати ще раз?"))return;
   ui.annBusy=true;
-  dispatch({mode:kind,game:gid}).then(function(ok){
-    ui.annBusy=false; if(!ok)return;
+  notify({mode:kind,game:gid}).then(function(j){
+    ui.annBusy=false; if(!j)return;
     var games=S.games.map(function(x){
       if(x.id!==gid)return x;
       var n={}; Object.keys(x).forEach(function(k){n[k]=x[k];});
@@ -735,7 +738,7 @@ function announceGame(kind,gid){
       if(kind==="cancel")n.x=true; else delete n.x;
       return n;
     });
-    save({v:S.v,players:S.players,games:games},kind==="gather"?"Бот надішле «Збір є» за хвилину-дві":"Гру скасовано, бот надішле повідомлення за хвилину-дві",(kind==="gather"?"Збір є: гра ":"Збір скасовано: гра ")+g.date);
+    save({v:S.v,players:S.players,games:games},(kind==="gather"?"Збір є — ":"Гру скасовано — ")+notifyMsg(j),(kind==="gather"?"Збір є: гра ":"Збір скасовано: гра ")+g.date);
   });
 }
 
@@ -1005,12 +1008,13 @@ function savePay(){
     if(keep.length)n.paid=keep; else delete n.paid; return n;
   });
   var msg="Оплата"+(names.length?": "+names.join(", ")+" ("+Object.keys(dates).join(", ")+")":": зміни");
-  save({v:S.v,players:S.players,games:games},"Оплату збережено",msg);
+  /* після збереження — подяка від бота (не блокує сторінку; помилку покаже тост) */
+  save({v:S.v,players:S.players,games:games},"Оплату збережено",msg,names.length&&SET().worker?function(){
+    notify({mode:"thanks"}).then(function(j){if(j&&j.sent.length)toast("Оплату збережено. Бот подякував: "+j.sent.join(", "));});
+  }:null);
 }
 function remindNow(pid){
-  dispatch({mode:"remind",player:pid==="*"?"":pid}).then(function(ok){
-    if(ok)toast(pid==="*"?"Бот надішле нагадування всім боржникам за хвилину-дві":"Бот надішле нагадування гравцю "+pname(pid)+" за хвилину-дві");
-  });
+  notify({mode:"remind",player:pid==="*"?"":pid}).then(function(j){if(j)toast(notifyMsg(j));});
 }
 
 /* ---------- налаштування (редактор) ---------- */
@@ -1066,7 +1070,8 @@ function settingsView(){
     '<div class="two"><label class="field">Посилання Sinoptik<input type="url" id="s-sin" value="'+esc(s.sinoptik)+'"></label>'+
     '<label class="field">Посилання Meteo.ua<input type="url" id="s-met" value="'+esc(s.meteo)+'"></label></div></div>'+
   '<div class="panel pad stack"><div><h2 class="h">Telegram-бот</h2><p class="sub">Як створити бота і підключити його — у README</p></div>'+
-    '<label class="field">Імʼя бота <span class="hint">без @, напр. friday55_bot</span><input type="text" id="s-bot" value="'+esc(s.bot)+'" autocapitalize="off" autocomplete="off"></label>'+
+    '<div class="two"><label class="field">Імʼя бота <span class="hint">без @, напр. friday55_bot</span><input type="text" id="s-bot" value="'+esc(s.bot)+'" autocapitalize="off" autocomplete="off"></label>'+
+    '<label class="field">Адреса бота (Worker) <span class="hint">Cloudflare</span><input type="url" id="s-worker" value="'+esc(s.worker)+'" autocapitalize="off" autocomplete="off"></label></div>'+
     '<label class="chk"><input type="checkbox" id="s-ron"'+(r.on?" checked":"")+'> Автоматичні нагадування</label>'+
     '<div class="stack sched" id="s-sched" data-mode="'+r.mode+'">'+
     '<div class="rmode"><label class="chk"><input type="radio" name="s-rmode" value="after"'+(r.mode==="after"?" checked":"")+'> Через N днів після гри</label>'+
@@ -1078,7 +1083,7 @@ function settingsView(){
       '<input type="time" step="900" id="s-qfrom" value="'+esc(r.quiet.from)+'"><span>—</span><input type="time" step="900" id="s-qto" value="'+esc(r.quiet.to)+'"></div></div>'+
     '<div class="two"><label class="field">Повторювати кожні, днів<input type="number" min="1" id="s-every" value="'+esc(r.every)+'"></label>'+
     '<label class="field">Максимум нагадувань<input type="number" min="1" id="s-max" value="'+esc(r.max)+'"></label></div>'+
-    '<p class="note">Бот запускається кожні 15 хв, а GitHub буває запізнюється, тож повідомлення може прийти на 5–30 хв пізніше вказаного часу. Якщо час припав на тихі години, нагадування чекає їх кінця (в межах того ж дня).</p></div></div>'+
+    '<p class="note">Розклад бот перевіряє кожні 15 хв, тож повідомлення може прийти до 15 хв пізніше вказаного часу. Якщо час припав на тихі години, нагадування чекає їх кінця (в межах того ж дня).</p></div></div>'+
     botPeople(s)+
   '<div class="panel pad stack"><div><h2 class="h">Тексти</h2><p class="sub">Кілька варіантів розділяйте рядком <b>---</b>, бот обирає випадковий. Підстановки: {name} {sum} {debt} {date} {score} {verdict} {card} {cardName} {bank} {site}</p></div>'+
     ta("s-thanks","Подяка після оплати",s.thanks)+
@@ -1094,6 +1099,7 @@ function readSets(){
   if(v("s-price")===null)return;
   s.price=num("s-price",s.price); s.payFrom=v("s-from")||""; s.org=v("s-org")||""; s.card=v("s-card").trim(); s.cardName=v("s-cname").trim(); s.bank=v("s-bank").trim();
   s.bot=v("s-bot").trim().replace(/^(https?:\/\/)?t\.me\//i,"").replace(/^@/,"");
+  s.worker=v("s-worker").trim().replace(/\/+$/,"");
   var mode=document.querySelector('input[name="s-rmode"]:checked'), days=[];
   Array.prototype.forEach.call(document.querySelectorAll("[data-wd]"),function(el){if(el.checked)days.push(+el.dataset.wd);});
   ui.timesRaw=v("s-times");
@@ -1112,6 +1118,7 @@ function saveSets(){
   if(!(Math.abs(s.lat)<=90&&Math.abs(s.lon)<=180)){toast("Погода: широта від −90 до 90, довгота від −180 до 180");return;}
   if((s.sinoptik&&!/^https:\/\//.test(s.sinoptik))||(s.meteo&&!/^https:\/\//.test(s.meteo))){toast("Посилання на погоду мають починатися з https://");return;}
   if(!s.gather.length||!s.cancel.length){toast("Потрібен хоча б один текст «Збір є» і «Збір скасовано»");return;}
+  if(s.worker&&!/^https:\/\/[^\/]+$/.test(s.worker)){toast("Адреса бота: https://… без шляху, напр. https://bot.shtuchka.workers.dev");return;}
   if(s.bank&&!/^https:\/\//.test(s.bank)){toast("Посилання на оплату має починатися з https://");return;}
   var r=s.remind;
   if(r._bad){toast("Час відправки: формат ГГ:ХХ з кроком 15 хв, напр. 12:00, 19:30");return;}
