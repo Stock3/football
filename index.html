@@ -391,7 +391,7 @@ var DEF = /*DEF*/{
   "outOk":"Добре, викреслив. Якщо щось зміниться — пиши 🙂",
   "inGame":"Ти в грі ✅ ({count}/{need})",
   "skipped":"Ти пропускаєш цю гру ❌",
-  "full":"Вже повний склад. Ти перший у черзі — напишу, щойно звільниться місце",
+  "full":"Вже повний склад, ти перший у черзі — напишу, якщо звільниться місце",
   "laterAsk":"Коли перепитати? Якщо не вибереш — через 2 год",
   "laterOk":"Добре, перепитаю через {after} 🕐"
  }
@@ -832,6 +832,17 @@ function botSync(okMsg,gid){
     if(j)loadTG();
   });
 }
+/* «Відвʼязати» (Налаштування → Підключення до бота): бот прибирає привʼязку чату з tg.json, гравцю нічого не пише */
+function unlinkBot(id){
+  var c=(TG.chats||{})[id]; if(!c||!editor||ui.unlinkBusy)return;
+  if(!window.confirm("Відвʼязати бота від гравця "+pname(id)+(c.u?" (@"+c.u+")":"")+"? Бот перестане йому писати, поки він знову не підключиться."))return;
+  ui.unlinkBusy=true;
+  notify({mode:"unlink",player:id}).then(function(j){
+    ui.unlinkBusy=false; if(!j)return;
+    if(TG.chats)delete TG.chats[id];
+    render(); toast(pname(id)+": бота відвʼязано");
+  });
+}
 function notifyMsg(j){return "Надіслано: "+j.sent.length+(j.missing.length?". Не підключені: "+j.missing.join(", "):"");}
 /* «Збір є» / «Збір скасовано»: бот пише гравцям гри, сайт записує ann (і x для скасування) */
 function announceGame(kind,gid){
@@ -1158,7 +1169,8 @@ function botPeople(s){
     var c=ch[p.id], noU=!p.tg?' · <span title="У профілі не вказано Telegram-username: підключиться лише за посиланням">немає username</span>':'';
     return '<div class="debt"><div style="min-width:0"><a class="more" href="#'+esc(p.id)+'">'+esc(p.name)+'</a>'+
       '<small>'+(c?'<span class="tgok">🤖 підключено'+(c.u?' @'+esc(c.u):'')+'</span>':'<span class="tgno">не підключено</span>')+'<span class="tgno">'+noU+'</span></small></div>'+
-      (!c&&s.bot?'<button class="btn ghost small" style="white-space:nowrap" data-copy="'+esc(link(p.id))+'" title="Скопіювати посилання для підключення">Скопіювати посилання</button>':'')+'</div>';
+      (!c&&s.bot?'<button class="btn ghost small" style="white-space:nowrap" data-copy="'+esc(link(p.id))+'" title="Скопіювати посилання для підключення">Скопіювати посилання</button>':'')+
+      (c&&editor?'<button class="btn ghost small" style="white-space:nowrap" data-unlink="'+esc(p.id)+'" title="Прибрати привʼязку Telegram-чату до цього гравця (йому нічого не надсилається)">Відвʼязати</button>':'')+'</div>';
   }).join("");
   return '<div class="panel pad stack"><div><h2 class="h">Підключення до бота</h2><p class="sub">Підключено '+n+' з '+act.length+' активних гравців'+(s.bot?'':'. Вкажіть імʼя бота, щоб копіювати посилання')+'</p></div><div>'+rows+'</div></div>';
 }
@@ -1262,7 +1274,7 @@ var POLLT=[["pollInvite","Запрошення","кнопки ✅ Буду · �
   ["postW","Після гри: перемога",""],["postL","Після гри: поразка",""],["postD","Після гри: нічия",""],["prepaid","Подяка за оплату наперед (гра ще без рахунку)",""]];
 var SAYK=[["adminOnly","Не організатор натиснув /poll чи /endpoll"],["closed","Кнопка після закриття опитування"],["noPoll","Опитування не йде"],["notIn","/out, але гравця немає в складі"],
   ["askReason","/out: запит причини"],["outOk","/out: підтвердження"],["inGame","Запрошення після «Буду» ({count} {need})"],["skipped","Запрошення після «Не зможу»"],
-  ["full","Передумав, а склад повний"],["laterAsk","«Скажу пізніше»: коли перепитати"],["laterOk","«Скажу пізніше»: підтвердження ({after})"]];
+  ["full","Передумав або хоче повернутися (кнопка, /in), а склад повний"],["laterAsk","«Скажу пізніше»: коли перепитати"],["laterOk","«Скажу пізніше»: підтвердження ({after})"]];
 function saveSets(){
   readSets(); var s=ui.sets;
   if(!s.thanks.length||!s.reminders.length){toast("Потрібен хоча б один текст подяки й нагадування");return;}
@@ -1383,6 +1395,7 @@ app.addEventListener("click",function(e){
   if(ds.tab){if(ui.tab==="settings")readSets(); ui.tab=ds.tab;ui.manage=false;ui.preview=null;ui.previewG=null;clearHash();render();window.scrollTo(0,0);return;}
   if(ds.pay){var pp=ds.pay.split("|");togglePay(pp[0],pp[1]);return;}
   if(ds.remind){remindNow(ds.remind);return;}
+  if(ds.unlink){unlinkBot(ds.unlink);return;}
   if(ds.ann){var an=ds.ann.split("|");announceGame(an[0],an[1]);return;}
   if(ds.genfrom){var gf=S.games.filter(function(x){return x.id===ds.genfrom;})[0]; if(!gf)return;
     ui.gen={sel:gameIds(gf),guests:(+gf.gy||0)+(+gf.gb||0),pick:0,res:null,gid:gf.id}; generate(); ui.tab="gen"; clearHash(); render(); window.scrollTo(0,0); return;}

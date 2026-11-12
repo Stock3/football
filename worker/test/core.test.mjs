@@ -50,6 +50,18 @@ test("/start: чужий username не може підключитися до п
   assert.equal(r.ops.length, 0);
   assert.match(r.msgs[0].text, /Це посилання для гравця Борис/);
 });
+test("/start <id>: username належить іншому гравцю → відмова без підключення; свій id і звичайний /start працюють", () => {
+  // Борис (p2) має tg «bob»; хтось із цим username відкрив посилання Вови (p3)
+  const r = core.onMessage(C0({ tg: {} }), pm("/start p3", 558, "Bob"));
+  assert.equal(r.ops.length, 0);
+  assert.equal(r.msgs[0].text, "Ти вже є в списку як Борис 🙂 Натисни /start без посилання.");
+  // посилання з власним id — підключає
+  assert.equal(core.onMessage(C0({ tg: {} }), pm("/start p2", 559, "bob")).ops[0].pid, "p2");
+  // звичайний /start за username — як раніше
+  assert.equal(core.onMessage(C0({ tg: {} }), pm("/start", 560, "bob")).ops[0].pid, "p2");
+  // username, якого немає в профілях, посилання не блокує
+  assert.equal(core.onMessage(C0({ tg: {} }), pm("/start p3", 561, "vova")).ops[0].pid, "p3");
+});
 test("/start: невідомий гравець і невідомий username", () => {
   assert.match(core.onMessage(C0(), pm("/start p99")).msgs[0].text, /Не знайшов такого гравця/);
   assert.match(core.onMessage(C0(), pm("/start", 1, "nobody")).msgs[0].text, /Щоб я знав, хто ти/);
@@ -271,6 +283,27 @@ test("/notify thanks / remind / gather / cancel", async () => {
     assert.equal(r.status, 400);
   });
 });
+test("/notify unlink: потрібен токен; привʼязка прибирається, гравцю нічого не пишемо; повторно — ok без запису", async () => {
+  const w = mockWorld();
+  const o = { Origin: "https://stock3.github.io", "content-type": "application/json" };
+  const call = async (b, auth) => { const r = await worker.fetch(req("/notify", { method: "POST", headers: { ...o, ...(auth === null ? {} : { Authorization: "Bearer " + (auth || "owner-token") }) }, body: JSON.stringify(b) }), env, ctxMock()); return { status: r.status, j: await r.json() }; };
+  await quiet(async () => {
+    assert.equal((await call({ mode: "unlink", player: "p3" }, null)).status, 401);
+    assert.equal((await call({ mode: "unlink", player: "p3" }, "reader-token")).status, 403);
+    assert.deepEqual(Object.keys(tgState(w).chats), ["p1", "p2", "p3"], "без прав привʼязка лишається");
+    assert.equal(w.puts.length, 0);
+    assert.equal((await call({ mode: "unlink" })).status, 400);
+    let r = await call({ mode: "unlink", player: "p3" });
+    assert.deepEqual(r, { status: 200, j: { ok: true, unlinked: true } });
+    assert.deepEqual(Object.keys(tgState(w).chats), ["p1", "p2"]);
+    assert.equal(w.puts.length, 1);
+    assert.equal(w.puts[0].body.message, "Бот: відключено Вова");
+    assert.equal(w.sent.length, 0, "повідомлення гравцю немає");
+    r = await call({ mode: "unlink", player: "p3" });
+    assert.deepEqual(r.j, { ok: true, unlinked: false });
+    assert.equal(w.puts.length, 1);
+  });
+});
 test("cron: нагадування за розкладом один раз за слот", async () => {
   const data = fixture(); data.settings.remind.times = ["00:00"];
   // підсумок гри g1 уже надіслано — тут перевіряємо лише нагадування й подяки
@@ -293,7 +326,7 @@ test("/setup: ключ, webhook з секретом, команди; /health", a
   const sw = w.tgCalls.find((x) => x.method === "setWebhook").body;
   assert.deepEqual(sw, { url: "https://bot.shtuchka.workers.dev/tg", secret_token: SECRET, allowed_updates: ["message", "callback_query"], drop_pending_updates: false });
   // /poll і /endpoll — лише для організатора, у публічному меню їх немає
-  assert.deepEqual(w.tgCalls.find((x) => x.method === "setMyCommands").body.commands.map((c) => c.command), ["who", "out", "status", "weather", "stop"]);
+  assert.deepEqual(w.tgCalls.find((x) => x.method === "setMyCommands").body.commands.map((c) => c.command), ["who", "in", "out", "status", "weather", "stop"]);
   const h = await worker.fetch(req("/health"), env, ctxMock());
   assert.equal(await h.text(), "ok");
   assert.equal((await worker.fetch(req("/nope"), env, ctxMock())).status, 404);
@@ -397,7 +430,7 @@ test("/notify sync: рахунок внесено → підсумок гри з
   // g1 зіграна 3:2: жовті Аня (p1, організатор) і Борис — перемога; Вова оплатив — йому лише подяка; Гліб без бота
   assert.deepEqual(j.sent.sort(), ["Аня", "Борис", "Вова"]);
   assert.match(w.sent.find((m) => m.chat_id === 103).text, /Вова/);  assert.deepEqual(j.missing, ["Гліб"]);
-  assert.match(w.sent.find((m) => m.chat_id === 102).text, /^🏆 Борис, класна гра — перемога 3:2!/);
+  assert.match(w.sent.find((m) => m.chat_id === 102).text, /^(🏆 Борис, класна гра — перемога 3:2!|💪 Три очки наші, 3:2!)/); // текст обирається випадково
   assert.equal(tgState(w).poll.open, false);
   assert.ok(tgState(w).sent.g1.p2.pg);
   await quiet(async () => { j = await call({ mode: "played", game: "g1" }); });

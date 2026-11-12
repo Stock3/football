@@ -229,6 +229,9 @@ export function onMessage(C, m, as) {
   if (c === "/weather" || /^погода/i.test(text)) return { ...out, weather: { chat: chatId, ...asEv } }; // будь-кому, навіть не підключеним
   if (c === "/start") {
     const p = arg ? C.players[arg] : uname ? C.data.players.find((x) => x.tg && x.tg.toLowerCase() === uname.toLowerCase()) : null;
+    // посилання з чужим id, а username належить іншому гравцю: не підключаємо — людина вже є в списку
+    const mine = arg && uname ? C.data.players.find((x) => x.tg && x.tg.toLowerCase() === uname.toLowerCase()) : null;
+    if (mine && p && mine.id !== p.id) return say(`Ти вже є в списку як ${mine.name} 🙂 Натисни /start без посилання.`);
     if (arg && !p) return say(`Не знайшов такого гравця 🤔 Відкрий свій профіль на сайті й натисни «Підключити Telegram-бота».${siteLine}`);
     if (!p) return say(`Привіт! Щоб я знав, хто ти, відкрий свій профіль на сайті й натисни «Підключити Telegram-бота».${siteLine}`);
     // якщо в профілі вказано username, підключитися може лише ця людина
@@ -249,6 +252,10 @@ export function onMessage(C, m, as) {
     if (!pid) return say(unknown);
     return { ...out, poll: { t: "who", chat: chatId, ...asEv } };
   }
+  if (c === "/in" || /^хочу грати/i.test(text)) {
+    if (!pid) return say(unknown);
+    return { ...out, poll: { t: "in", chat: chatId, ...asEv } };
+  }
   if (c === "/out" || /^не зможу/i.test(text)) {
     if (!pid) return say(unknown);
     return { ...out, poll: { t: "ask", chat: chatId, ...asEv } };
@@ -260,7 +267,7 @@ export function onMessage(C, m, as) {
     const v = vars(C, pid, list);
     return say(fill(`💸 ${v.name}, не оплачено за {debt}. Разом {sum} грн.\nКартка: {card} {cardName}${C.S.bank ? "\n{bank}" : ""}`, v));
   }
-  return say("Я вмію: /who — хто йде, /out — не зможу прийти, /status — перевірити оплату, /weather — погода на пʼятницю, /stop — не писати мені 🙂");
+  return say("Я вмію: /who — хто йде, /in — хочу грати, /out — не зможу прийти, /status — перевірити оплату, /weather — погода на пʼятницю, /stop — не писати мені 🙂");
 }
 
 // ---------- погода ----------

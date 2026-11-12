@@ -420,3 +420,142 @@ test("старі дані без prio, poll, нових текстів — пр�
   assert.equal(C.S.say.closed, "Опитування вже закрито");
   assert.deepEqual(core.normState({ chats: {} }), { chats: {}, sent: {}, slots: [] });
 });
+
+// ---------- повернення в гру: «↩️ Повернутися в гру» і /in ----------
+// Мала команда: активні p1 (організатор), p2, p3 — усі запрошені, черга порожня; p13 неактивний (його не запрошують), але бота має.
+function smallWorld(need) {
+  const data = fixture();
+  data.players = data.players.filter((p) => ["p1", "p2", "p3", "p13"].includes(p.id));
+  if (need) data.settings.poll = { need };
+  const chats = Object.fromEntries(["p1", "p2", "p3", "p13"].map((p) => [p, { id: chat(p), u: "" }]));
+  return world({ data, tg: { chats } });
+}
+const kbData = (m) => m.kb.inline_keyboard.flat().map((b) => [b.text, b.callback_data]);
+const FULL_TEXT = "Вже повний склад, ти перший у черзі — напишу, якщо звільниться місце";
+
+test("↩️ після «Передумав»: кнопка «Повернутися в гру» → знову «Буду» з {count}/{need}, звіт організатору", () => {
+  const W = smallWorld(); say(W, "/poll", "p1");
+  press(W, "p2", "y");
+  const out = press(W, "p2", "c"); // «Передумав» після «Буду» = вихід зі складу
+  assert.deepEqual(G(W).c, []);
+  assert.equal(out.edits[0].text, "Ти пропускаєш цю гру ❌");
+  assert.deepEqual(kbData(out.edits[0].kb ? { kb: out.edits[0].kb } : null), [["↩️ Повернутися в гру", "r|" + GID], ["🌦 Погода", "w|" + GID]]);
+  const r = press(W, "p2", "r");
+  assert.deepEqual(G(W).c, ["p2"]);
+  assert.equal(P(W).inv.p2.ans, "yes");
+  assert.equal(r.edits[0].text, "Ти в грі ✅ (1/10)");
+  assert.deepEqual(r.edits[0].kb.inline_keyboard.flat().map((b) => b.callback_data), ["c|" + GID, "w|" + GID]);
+  assert.match(to(r, "p2")[0].text, /1\/10/);
+  assert.equal(adm(r), "↩️ Борис повернувся (1/10)");
+  // стара кнопка «Повернутися» вдруге нічого не скасовує
+  const again = press(W, "p2", "r");
+  assert.deepEqual(G(W).c, ["p2"]);
+  assert.equal(again.answer.text, "Ти вже в грі ✅");
+});
+test("↩️ після /out: запрошення редагується на «Повернутися в гру», а /in повертає й оновлює його", () => {
+  const W = smallWorld(); say(W, "/poll", "p1");
+  press(W, "p2", "y"); // повідомлення 77 запамʼятовується
+  assert.equal(P(W).inv.p2.msg, 77);
+  say(W, "/out", "p2");
+  const o = say(W, "/skip", "p2");
+  assert.deepEqual(G(W).c, []);
+  assert.equal(o.edits.length, 1);
+  assert.deepEqual({ chat: o.edits[0].chat, msg: o.edits[0].msg, text: o.edits[0].text }, { chat: chat("p2"), msg: 77, text: "Ти пропускаєш цю гру ❌" });
+  assert.deepEqual(o.edits[0].kb.inline_keyboard.flat().map((b) => [b.text, b.callback_data]), [["↩️ Повернутися в гру", "r|" + GID], ["🌦 Погода", "w|" + GID]]);
+  const r = say(W, "/in", "p2");
+  assert.deepEqual(G(W).c, ["p2"]);
+  assert.match(to(r, "p2")[0].text, /1\/10/);
+  assert.equal(adm(r), "↩️ Борис повернувся (1/10)");
+  assert.equal(r.edits[0].msg, 77);
+  assert.equal(r.edits[0].text, "Ти в грі ✅ (1/10)");
+});
+test("/in: вільне місце — навіть для того, кого не запрошували; повторно — «Ти в грі»", () => {
+  const W = smallWorld(); say(W, "/poll", "p1");
+  assert.equal(P(W).inv.p13, undefined);
+  const r = say(W, "/in", "p13");
+  assert.deepEqual(G(W).c, ["p13"]);
+  assert.equal(P(W).inv.p13.ans, "yes");
+  assert.match(to(r, "p13")[0].text, /1\/10/);
+  assert.equal(adm(r), "↩️ Леся повернувся (1/10)");
+  const again = say(W, "/in", "p13");
+  assert.deepEqual(G(W).c, ["p13"]);
+  assert.equal(to(again, "p13")[0].text, "Ти в грі ✅ (1/10)");
+});
+test("/in: склад повний → перший у черзі (queueFront), відповідь і звіт; звільнилось місце — запрошують першим", () => {
+  const W = world(); startFull(W); // 9 у складі + Дана без бота тримає місце
+  assert.equal(G(W).c.length, 9);
+  const r = say(W, "/in", "p10"); // Їжак — далеко в черзі, його ще не запрошували
+  assert.equal(P(W).inv.p10, undefined, "Їжака не запрошували");
+  assert.deepEqual(G(W).c.includes("p10"), false);
+  assert.deepEqual(P(W).queueFront, ["p10"]);
+  assert.equal(to(r, "p10")[0].text, FULL_TEXT);
+  assert.equal(adm(r), "↩️ Їжак хоче грати — перший у черзі");
+  // повторний /in не дублює чергу
+  say(W, "/in", "p10");
+  assert.deepEqual(P(W).queueFront, ["p10"]);
+  // хтось скасував → місце першим дістається Їжаку
+  say(W, "/out", "p2");
+  const o = say(W, "/skip", "p2");
+  assert.deepEqual(P(W).queueFront, []);
+  assert.equal(P(W).inv.p10.ans, null);
+  assert.match(adm(o), /запрошено: Їжак/);
+  assert.ok(to(o, "p10").some((m) => m.inv === "p10"));
+});
+test("↩️ кнопка «Повернутися» при повному складі: перший у черзі, повідомлення редагується", () => {
+  const W = world(); startFull(W);
+  press(W, "p12", "c"); // Кіра передумала й вийшла; її місце одразу запрошене наступному
+  assert.equal(G(W).c.includes("p12"), false);
+  const r = press(W, "p12", "r");
+  assert.equal(G(W).c.includes("p12"), false);
+  assert.ok(P(W).queueFront.includes("p12"));
+  assert.equal(r.answer.text, "Вже повний склад");
+  assert.equal(r.edits[0].text, FULL_TEXT);
+  assert.deepEqual(r.edits[0].kb.inline_keyboard.flat().map((b) => b.callback_data), ["r|" + GID, "w|" + GID]);
+  assert.equal(adm(r), "↩️ Кіра хоче грати — перший у черзі");
+});
+test("/in без опитування й після його закриття — «Зараз опитування немає» / кнопка «закрито»; невідомому — підказка", () => {
+  const W = smallWorld();
+  assert.equal(say(W, "/in", "p2").msgs[0].text, "Зараз опитування немає");
+  assert.match(say(W, "/in", "p99").msgs[0].text, /Я тебе ще не знаю/);
+  say(W, "/poll", "p1"); press(W, "p2", "y"); say(W, "/endpoll", "p1");
+  assert.equal(say(W, "/in", "p2").msgs[0].text, "Зараз опитування немає"); // закрите опитування — як відсутнє
+  const b = press(W, "p2", "r");
+  assert.equal(b.answer.text, "Опитування вже закрито");
+  assert.equal(b.data, null);
+});
+test("/in під час очікування причини після /out: причина більше не чекається (наступний текст не викидає зі складу)", () => {
+  const W = smallWorld(); say(W, "/poll", "p1"); press(W, "p2", "y");
+  say(W, "/out", "p2");
+  assert.ok(P(W).wait && P(W).wait.p2);
+  say(W, "/in", "p2");
+  assert.equal(P(W).wait, undefined);
+  assert.deepEqual(G(W).c, ["p2"]);
+  assert.equal(msg(W, "дякую", "p2").msgs[0].text.startsWith("Я вмію:"), true);
+});
+test("повернення після «Збір є» → знову N: усім у складі йде той самий текст «знову набралось»", () => {
+  const W = smallWorld(3); say(W, "/poll", "p1");
+  for (const p of ["p1", "p2", "p3"]) press(W, p, "y");
+  assert.ok(P(W).announced, "«Збір є» уже розіслано");
+  say(W, "/out", "p2");
+  const left = say(W, "/skip", "p2");
+  assert.equal(P(W).short, true);
+  assert.deepEqual(to(left, "p1").map((m) => m.text.startsWith("😬 Халепа, нас тепер 2")), [true]);
+  const r = say(W, "/in", "p2");
+  assert.equal(P(W).short, false);
+  const back = (pid) => to(r, pid).filter((m) => /^✅ Знову 3, склад: /.test(m.text));
+  assert.equal(back("p1").length, 1); assert.equal(back("p3").length, 1); assert.equal(back("p2").length, 1);
+  assert.match(back("p1")[0].text, /склад: Аня, Вова, Борис./); // порядок — як у data.json (спершу ті, хто лишився)
+  assert.match(adm(r), /^↩️ Борис повернувся \(3\/3\)\n✅ Знову 3\/3 — усім надіслано склад$/);
+});
+test("/as Імʼя /in у режимі тесту: повернення від імені гравця, усе йде адміну", () => {
+  const data = fixture(); data.settings.testMode = true;
+  data.players = data.players.filter((p) => ["p1", "p2", "p3"].includes(p.id));
+  const W = world({ data, tg: { chats: { p1: { id: chat("p1"), u: "" } } } });
+  say(W, "/poll", "p1");
+  assert.ok(P(W));
+  say(W, "/as Борис Буду", "p1");
+  const r = say(W, "/as Борис /in", "p1");
+  assert.ok(r.msgs.every((m) => m.chat === chat("p1")));
+  assert.deepEqual(G(W).c, ["p2"]);
+  assert.match(to(r, "p2").map((m) => m.text).join("\n") + adm(r), /Ти в грі|1\/10/);
+});

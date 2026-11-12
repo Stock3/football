@@ -4,7 +4,8 @@
 //
 // Ендпоінти:
 //   POST /tg      — webhook Telegram (перевірка X-Telegram-Bot-Api-Secret-Token)
-//   POST /notify  — кнопки сайту {mode: thanks|remind|gather|cancel|sync|played, player?, game?}; Authorization: Bearer <GitHub-токен редактора>
+//   POST /notify  — кнопки сайту {mode: thanks|remind|gather|cancel|sync|played|unlink, player?, game?}; Authorization: Bearer <GitHub-токен редактора>
+//                   unlink — прибрати привʼязку чату гравця (tg.json), без повідомлення гравцю
 //                   sync/played — сайт щойно зберіг data.json: звірити опитування, надіслати підсумок гри й подяки
 //   GET  /setup?key=TG_SECRET — підключити webhook і меню команд
 //   GET  /health  — «ok»
@@ -172,6 +173,15 @@ async function notify(request, env) {
   try { b = await request.json(); } catch { return json({ ok: false, error: "Некоректний запит" }, 400, h); }
   const mode = b.mode, st = await load(env), C = ctx(env, st);
   let r;
+  if (mode === "unlink") {
+    // «Відвʼязати» в налаштуваннях сайту: прибрати привʼязку чату до гравця (гравцю нічого не пишемо)
+    const pid = String(b.player || "");
+    if (!pid) return json({ ok: false, error: "Не вказано гравця" }, 400, h);
+    const had = !!C.tg.chats[pid];
+    if (had) await saveTg(env, st, [{ op: "unlink", pid }], C.T.date);
+    console.log(`/notify unlink: ${had ? "відвʼязано" : "привʼязки не було"}`);
+    return json({ ok: true, unlinked: had }, 200, h);
+  }
   if (mode === "thanks") r = core.thanks(C);
   else if (mode === "remind") r = core.reminders(C, { manual: true, player: String(b.player || "") });
   else if (mode === "gather" || mode === "cancel") r = core.announce(C, mode, String(b.game || ""));
@@ -212,6 +222,7 @@ async function setup(url, env) {
   // /poll, /endpoll, /no — команди організатора, у меню їх немає
   await step("setMyCommands", "setMyCommands", { commands: [
     { command: "who", description: "Хто йде" },
+    { command: "in", description: "Хочу грати" },
     { command: "out", description: "Не зможу" },
     { command: "status", description: "Мій борг за ігри" },
     { command: "weather", description: "Погода на пʼятницю" },

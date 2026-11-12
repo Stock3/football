@@ -8,12 +8,13 @@
 //
 // Склад гри живе в data.json (c — «буде», y/b — команди, gy/gb — гості). У tg.json — лише стан опитування:
 // poll { game, open, startedAt, closedAt?, announced, short, empty?, queueFront: [pid], wait?: {pid: ISO},
-//        inv: { pid: { at, ans: "yes"|"no"|"later"|null, laterUntil?, remindedAt?, reason?, nobot? } } }
+//        inv: { pid: { at, ans: "yes"|"no"|"later"|null, laterUntil?, remindedAt?, reason?, nobot?, msg? } } }
 //   inv — кого бот запрошував; announced — коли розіслано «Збір є»; short — після «Збір є» когось бракує;
 //   queueFront — передумали після «Не зможу», коли склад був повний: перші на наступне вільне місце;
-//   wait — після /out чекаємо причину; empty — організатору вже сказано, що черга закінчилась.
+//   wait — після /out чекаємо причину; empty — організатору вже сказано, що черга закінчилась;
+//   inv.msg — id повідомлення з кнопками, на яке востаннє натиснув гравець (щоб /out і /in могли його відредагувати).
 //
-// Події ev.t: start (/poll або автозапуск), end (/endpoll), cb (кнопка), ask (/out), out (причина або /skip),
+// Події ev.t: start (/poll або автозапуск), end (/endpoll), cb (кнопка), ask (/out), out (причина або /skip), in (/in — хочу грати),
 //   who (/who), no (/no Імʼя — організатор відмічає «не зможе»), sync (сайт зберіг дані), tick (cron), nobot (не дійшло запрошення),
 //   testreset (/testreset — лише в режимі тесту: скинути опитування й прапорці надсилання тестової гри).
 // Режим тесту (settings.testMode): ev.as — id гравця, від імені якого діє адмін (/as; кнопка в перенаправленому повідомленні несе id
@@ -82,6 +83,8 @@ export function whoText(C, g, P) {
 const kb = (rows) => ({ inline_keyboard: rows.map((r) => r.map(([text, data]) => ({ text, callback_data: data }))) });
 export const inviteKb = (gid) => kb([[["✅ Буду", "y|" + gid], ["❌ Не зможу", "n|" + gid]], [["🕐 Скажу пізніше", "l|" + gid], ["🌦 Погода", "w|" + gid]]]);
 const changedKb = (gid) => kb([[["🔄 Передумав", "c|" + gid], ["🌦 Погода", "w|" + gid]]]);
+// після виходу зі складу: дія r — це «хочу грати», а не «передумав»: якщо гравець уже в грі, вона нічого не скасовує
+const backKb = (gid) => kb([[["↩️ Повернутися в гру", "r|" + gid], ["🌦 Погода", "w|" + gid]]]);
 const laterKb = (gid) => kb([Object.entries(LATER).map(([k, m]) => [LATER_LABEL[m], k + "|" + gid])]);
 
 // ---------- крок ----------
@@ -141,6 +144,12 @@ function toP(X, pid, text, markup, extra) {
   return true;
 }
 const edit = (X, m, text, markup) => { if (m && m.chat != null && m.msg != null) X.edits.push({ chat: m.chat, msg: m.msg, text, kb: markup || null, ...(X.as ? { pid: X.as } : {}) }); };
+// Що редагувати: повідомлення, на яке натиснули; для команд (/out, /in) — останнє повідомлення гравця з кнопками
+const target = (X, pid, m) => {
+  if (m) return m;
+  const inv = X.P && X.P.inv[pid], ch = chatFor(X.C, pid);
+  return inv && inv.msg != null && ch ? { chat: ch.id, msg: inv.msg } : null;
+};
 const quiet = (X) => inQuiet(X.C.T.time, S(X).remind.quiet);
 
 function closeIf(X) {
@@ -213,31 +222,46 @@ function announceCheck(X, g) {
 }
 
 // ---------- відповіді ----------
-function yes(X, g, pid, m) {
+function yes(X, g, pid, m, back) {
   const P = X.P, N = need(X.C), name = nameOf(X.C, pid);
-  const inv = (P.inv[pid] ??= { at: X.now, ans: null });
+  const held = holds(P, g, pid); // запис inv створюємо лише після перевірки місця: незапрошений (/in) сам себе місцем не тримає
   if (inGame(g, pid)) {
-    if (inv.ans === "yes") { X.answer && (X.answer.text = "Ти вже в грі ✅"); edit(X, m, say(X, "inGame", { count: count(g), need: N }), changedKb(g.id)); return; }
+    if ((P.inv[pid] || {}).ans === "yes") { X.answer && (X.answer.text = "Ти вже в грі ✅"); edit(X, m, say(X, "inGame", { count: count(g), need: N }), changedKb(g.id)); return; }
     // уже в складі (додав сайт або попередня спроба запису) — далі як звичайне «Буду»
   } else {
-    if (count(g) >= N || (!holds(P, g, pid) && free(X, g) <= 0)) return full(X, g, pid, m);
+    if (count(g) >= N || (!held && free(X, g) <= 0)) return full(X, g, pid, m, back);
     (g.c ??= []).push(pid);
   }
+  const inv = (P.inv[pid] ??= { at: X.now, ans: null });
   inv.ans = "yes"; delete inv.laterUntil; delete inv.nobot;
   P.queueFront = P.queueFront.filter((x) => x !== pid);
-  edit(X, m, say(X, "inGame", { count: count(g), need: N }), changedKb(g.id));
+  edit(X, target(X, pid, m), say(X, "inGame", { count: count(g), need: N }), changedKb(g.id));
   toP(X, pid, fill(pick(X.C, S(X).pollYes), pv(X, g, pid)));
-  X.head.push(`✅ ${name} — буде (${count(g)}/${N})`);
-  X.notes.push(name + " буде"); X.dnotes.push(name + " буде");
+  X.head.push(back ? `↩️ ${name} повернувся (${count(g)}/${N})` : `✅ ${name} — буде (${count(g)}/${N})`);
+  X.notes.push(name + (back ? " повернувся" : " буде")); X.dnotes.push(name + (back ? " повернувся" : " буде"));
 }
-function full(X, g, pid, m) {
+// Повернення: кнопка «↩️ Повернутися в гру» і /in (також для того, кого не запрошували):
+// вільне місце — «Буду», склад повний — перший у черзі.
+function comeBack(X, g, pid, m) {
+  if (inGame(g, pid)) {
+    const t = say(X, "inGame", { count: count(g), need: need(X.C) });
+    if (m) { if (X.answer) X.answer.text = "Ти вже в грі ✅"; edit(X, m, t, changedKb(g.id)); } else reply(X, X.ev.chat, t);
+    return;
+  }
+  yes(X, g, pid, m, true);
+}
+function full(X, g, pid, m, back) {
   const P = X.P;
-  P.inv[pid] = { ...(P.inv[pid] || { at: X.now }), ans: "no" };
-  delete P.inv[pid].laterUntil;
+  if (P.inv[pid] || !back) { // незапрошений, що сам попросився (/in), у «Не зможе» не потрапляє — він лише в черзі
+    P.inv[pid] = { ...(P.inv[pid] || { at: X.now }), ans: "no" };
+    delete P.inv[pid].laterUntil;
+  }
   if (!P.queueFront.includes(pid)) P.queueFront.push(pid);
   if (X.answer) X.answer.text = "Вже повний склад";
-  if (m) edit(X, m, say(X, "full"), changedKb(g.id)); else toP(X, pid, say(X, "full"));
-  X.head.push(`🔁 ${nameOf(X.C, pid)} хоче грати, але склад повний — перший у черзі`);
+  const t = target(X, pid, m);
+  if (t) edit(X, t, say(X, "full"), back ? backKb(g.id) : changedKb(g.id));
+  if (!m) toP(X, pid, say(X, "full")); // команда /in: відповідь окремим повідомленням
+  X.head.push(back ? `↩️ ${nameOf(X.C, pid)} хоче грати — перший у черзі` : `🔁 ${nameOf(X.C, pid)} хоче грати, але склад повний — перший у черзі`);
   X.notes.push(nameOf(X.C, pid) + " у черзі");
 }
 function no(X, g, pid, m) {
@@ -286,7 +310,8 @@ function out(X, g, pid, reason, src, m) {
   const why = reason ? ": " + reason : src === "site" ? " (прибрано на сайті)" : src === "admin" ? " (відмітив організатор)" : "";
   X.head.push(`🚫 ${name} скасував${why}` + arrow(invd));
   if (src === "cmd" || src === "changed") toP(X, pid, say(X, "outOk"));
-  if (m) edit(X, m, say(X, "skipped"), changedKb(g.id));
+  const t = src === "cmd" || m ? target(X, pid, m) : null; // прибрано на сайті чи організатором — повідомлення гравця не чіпаємо
+  if (t) edit(X, t, say(X, "skipped"), backKb(g.id));
   X.notes.push(name + " скасував"); X.dnotes.push(name + " не зможе");
   return true;
 }
@@ -313,6 +338,16 @@ const HANDLERS = {
     else if (a === "l") later(X, g, X.pid, m);
     else if (LATER[a]) laterSet(X, g, X.pid, LATER[a], m);
     else if (a === "c") changed(X, g, X.pid, m);
+    else if (a === "r") comeBack(X, g, X.pid, m);
+    const iv = X.P.inv[X.pid];
+    if (iv && ev.msg != null && ["y", "n", "c", "r"].includes(a)) iv.msg = ev.msg;
+  },
+  in(X, ev) {
+    const g = game(X), pid = X.pid;
+    if (!pid) return;
+    if (X.P && X.P.wait) { delete X.P.wait[pid]; if (!Object.keys(X.P.wait).length) delete X.P.wait; } // людина повертається — причину не чекаємо
+    if (!X.P || !X.P.open || !g) return reply(X, ev.chat, say(X, "noPoll"));
+    comeBack(X, g, pid, null);
   },
   ask(X, ev) {
     const g = game(X), pid = X.pid;
