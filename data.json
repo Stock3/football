@@ -910,19 +910,19 @@
    "prio": 16
   },
   {
-   "id": "p16",
-   "name": "Назар від Влада",
-   "active": true,
-   "phone": "+380 95 477 02 06",
-   "tg": "mononazar",
-   "prio": 17
-  },
-  {
    "id": "p20",
    "name": "Ярік Бакрив",
    "active": true,
    "phone": "+380 68 099 89 68",
    "tg": "slav_chik_08",
+   "prio": 17
+  },
+  {
+   "id": "p16",
+   "name": "Назар від Влада",
+   "active": true,
+   "phone": "+380 95 477 02 06",
+   "tg": "mononazar",
    "prio": 18
   },
   {
