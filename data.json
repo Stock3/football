@@ -6,7 +6,7 @@
   "cardName": "",
   "bank": "",
   "payFrom": "2026-11-13",
-  "org": "",
+  "org": "p1",
   "bot": "shtuchka_5x5_bot",
   "remind": {
    "on": true,
