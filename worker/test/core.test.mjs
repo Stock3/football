@@ -138,7 +138,8 @@ test("worker/src/wx.js збігається з блоком /*WX*/ в index.html
 const SECRET = "s3cr3t-webhook", TGT = "123456:TG-TOKEN-XYZ", GHT = "github_pat_WORKER_TOKEN";
 const env = { TG_TOKEN: TGT, GH_TOKEN: GHT, TG_SECRET: SECRET, GH_REPO: "Stock3/football", GH_BRANCH: "main", SITE_ORIGIN: "https://stock3.github.io" };
 function mockWorld({ data = fixture(), tg = { chats }, conflicts = 0, onConflict } = {}) {
-  const w = { files: { "data.json": JSON.stringify(data), "index.html": HTML, "tg.json": JSON.stringify(tg) }, sha: 1, sent: [], puts: [], tgCalls: [], conflicts, logs: [], om: 0 };
+  // sha — версія tg.json, dsha — data.json; conflicts — скільки наступних записів відповісти 409
+  const w = { files: { "data.json": JSON.stringify(data), "index.html": HTML, "tg.json": JSON.stringify(tg) }, sha: 1, dsha: 1, sent: [], puts: [], tgCalls: [], conflicts, logs: [], om: 0, mid: 500 };
   const enc = (s) => Buffer.from(s, "utf8").toString("base64").replace(/(.{60})/g, "$1\n");
   globalThis.fetch = async (url, opt = {}) => {
     url = String(url); const body = opt.body ? JSON.parse(opt.body) : null; const hdr = opt.headers || {};
@@ -146,7 +147,10 @@ function mockWorld({ data = fixture(), tg = { chats }, conflicts = 0, onConflict
     if (url.startsWith("https://api.telegram.org/bot")) {
       assert.ok(url.includes(TGT));
       const method = url.split("/").pop(); w.tgCalls.push({ method, body });
-      if (method === "sendMessage") { w.sent.push(body); return res(200, { ok: true, result: {} }); }
+      if (method === "sendMessage") {
+        if (w.blocked && w.blocked.includes(body.chat_id)) return res(403, { ok: false, description: "Forbidden: bot was blocked by the user" });
+        w.sent.push(body); return res(200, { ok: true, result: { message_id: ++w.mid } });
+      }
       if (method === "getWebhookInfo") return res(200, { ok: true, result: { url: "https://bot.example/tg", pending_update_count: 0 } });
       return res(200, { ok: true, result: true });
     }
@@ -156,14 +160,16 @@ function mockWorld({ data = fixture(), tg = { chats }, conflicts = 0, onConflict
       assert.equal(hdr.Authorization, "Bearer " + GHT);
       assert.ok(hdr["User-Agent"]);
       const f = cm[1];
-      if (!opt.method || opt.method === "GET") return f in w.files ? res(200, { content: enc(w.files[f]), sha: f === "tg.json" ? "sha" + w.sha : "x" }) : res(404, {});
+      const cur = () => (f === "tg.json" ? "sha" + w.sha : f === "data.json" ? "d" + w.dsha : "x");
+      const bump = () => { if (f === "tg.json") w.sha++; else if (f === "data.json") w.dsha++; };
+      if (!opt.method || opt.method === "GET") return f in w.files ? res(200, { content: enc(w.files[f]), sha: cur() }) : res(404, {});
       w.puts.push({ f, body });
-      if (body.sha !== "sha" + w.sha || w.conflicts > 0) {
-        if (w.conflicts > 0) { w.conflicts--; if (onConflict) onConflict(w); w.sha++; }
+      if (body.sha !== cur() || w.conflicts > 0) {
+        if (w.conflicts > 0) { w.conflicts--; if (onConflict) onConflict(w, f); bump(); }
         return res(409, { message: "conflict" });
       }
-      w.files[f] = Buffer.from(body.content, "base64").toString("utf8"); w.sha++;
-      return res(200, { content: { sha: "sha" + w.sha } });
+      w.files[f] = Buffer.from(body.content, "base64").toString("utf8"); bump();
+      return res(200, { content: { sha: cur() } });
     }
     if (url === "https://api.github.com/repos/Stock3/football") {
       const t = hdr.Authorization;
@@ -267,7 +273,8 @@ test("/notify thanks / remind / gather / cancel", async () => {
 });
 test("cron: нагадування за розкладом один раз за слот", async () => {
   const data = fixture(); data.settings.remind.times = ["00:00"];
-  const w = mockWorld({ data });
+  // підсумок гри g1 уже надіслано — тут перевіряємо лише нагадування й подяки
+  const w = mockWorld({ data, tg: { chats, sent: { g1: { p1: { pg: "t", r: [] }, p2: { pg: "t", r: [] } } } } });
   for (let i = 0; i < 2; i++) { const c = ctxMock(); await quiet(async () => { await worker.scheduled({}, env, c); await c.done(); }); }
   // нагадування Ані й Борису + подяка-страховка Вові (оплату позначено, подяки ще не було); другий запуск — нічого
   assert.deepEqual(w.sent.map((m) => m.chat_id).sort(), [101, 102, 103]);
@@ -284,8 +291,9 @@ test("/setup: ключ, webhook з секретом, команди; /health", a
   assert.match(t, /setMyCommands: OK/);
   assert.match(t, /GitHub data\.json: OK/);
   const sw = w.tgCalls.find((x) => x.method === "setWebhook").body;
-  assert.deepEqual(sw, { url: "https://bot.shtuchka.workers.dev/tg", secret_token: SECRET, allowed_updates: ["message"], drop_pending_updates: false });
-  assert.deepEqual(w.tgCalls.find((x) => x.method === "setMyCommands").body.commands.map((c) => c.command), ["status", "weather", "stop"]);
+  assert.deepEqual(sw, { url: "https://bot.shtuchka.workers.dev/tg", secret_token: SECRET, allowed_updates: ["message", "callback_query"], drop_pending_updates: false });
+  // /poll і /endpoll — лише для організатора, у публічному меню їх немає
+  assert.deepEqual(w.tgCalls.find((x) => x.method === "setMyCommands").body.commands.map((c) => c.command), ["who", "out", "status", "weather", "stop"]);
   const h = await worker.fetch(req("/health"), env, ctxMock());
   assert.equal(await h.text(), "ok");
   assert.equal((await worker.fetch(req("/nope"), env, ctxMock())).status, 404);
@@ -303,4 +311,95 @@ test("токени ніколи не потрапляють у лог", async ()
   assert.ok(all.length > 0);
   for (const s of [TGT, GHT, SECRET, "owner-token"]) assert.ok(!all.includes(s), "у лозі є секрет");
   assert.match(all, /Telegram sendMessage: Forbidden: bot was blocked by the user/);
+});
+
+// ---------- опитування через index.js ----------
+// p1 — організатор (чат 101); гра ще не створена — /poll створить її в data.json
+function pollWorld(o = {}) {
+  const data = fixture();
+  data.settings.org = "p1";
+  data.games = [data.games[0]];
+  return mockWorld({ data, tg: { chats }, ...o });
+}
+const hook = (body) => worker.fetch(req("/tg", { method: "POST", headers: { "X-Telegram-Bot-Api-Secret-Token": SECRET }, body: JSON.stringify(body) }), env, ctxMockRun);
+let ctxMockRun;
+async function tgUpdate(body) { ctxMockRun = ctxMock(); const r = await hook(body); await ctxMockRun.done(); return r; }
+const dataState = (w) => JSON.parse(w.files["data.json"]);
+
+test("webhook: /poll → гра в data.json, запрошення з кнопками, стан у tg.json; кнопка «Буду» → c, редагування, answerCallbackQuery", async () => {
+  const w = pollWorld();
+  await quiet(async () => {
+    await tgUpdate({ message: pm("/poll", 101) });
+    const g = dataState(w).games.find((x) => x.id === "g20261113");
+    assert.ok(g, "гру створено");
+    assert.ok(w.puts.some((p) => p.f === "data.json" && /Бот: нова гра 2026-11-13/.test(p.body.message)));
+    const poll = tgState(w).poll;
+    assert.equal(poll.game, "g20261113");
+    // 5 активних: p1, p2, p3 мають бота; p4, p5 — без бота (організатору 📵)
+    const inv = w.sent.filter((m) => m.reply_markup);
+    assert.deepEqual(inv.map((m) => m.chat_id).sort(), [101, 102, 103]);
+    assert.match(w.sent.find((m) => m.chat_id === 101 && !m.reply_markup).text, /📵 Гліб без бота/);
+    w.sent.length = 0; w.tgCalls.length = 0;
+    await tgUpdate({ callback_query: { id: "cb1", from: { id: 102 }, data: "y|g20261113", message: { message_id: 9, chat: { id: 102, type: "private" } } } });
+  });
+  assert.deepEqual(dataState(w).games.find((x) => x.id === "g20261113").c, ["p2"]);
+  assert.equal(tgState(w).poll.inv.p2.ans, "yes");
+  const ans = w.tgCalls.find((x) => x.method === "answerCallbackQuery");
+  assert.equal(ans.body.callback_query_id, "cb1");
+  const ed = w.tgCalls.find((x) => x.method === "editMessageText");
+  assert.equal(ed.body.message_id, 9);
+  assert.equal(ed.body.text, "Ти в грі ✅ (1/10)");
+  assert.match(w.sent.find((m) => m.chat_id === 101).text, /✅ Борис — буде \(1\/10\)/);
+});
+test("webhook: 409 на data.json → перечитати й перерахувати; гравець не дублюється", async () => {
+  const w = pollWorld();
+  await quiet(() => tgUpdate({ message: pm("/poll", 101) }));
+  // поки бот рахував, сайт зберіг data.json (додав Аню вручну)
+  w.conflicts = 1;
+  let onc = (w2, f) => { const d = JSON.parse(w2.files["data.json"]); d.games.find((x) => x.id === "g20261113").y = ["p1"]; w2.files["data.json"] = JSON.stringify(d); };
+  globalThis.fetch = ((f) => async (url, opt) => { if (opt && opt.method === "PUT" && w.conflicts > 0) { onc(w, "data.json"); } return f(url, opt); })(globalThis.fetch);
+  const logs = await quiet(() => tgUpdate({ callback_query: { id: "cb2", data: "y|g20261113", message: { message_id: 3, chat: { id: 102 } } } }));
+  const g = dataState(w).games.find((x) => x.id === "g20261113");
+  assert.deepEqual(g.c, ["p2"]); assert.deepEqual(g.y, ["p1"]);
+  assert.ok(logs.some((l) => /опитування: конфлікт \(409\)/.test(l)));
+  assert.equal(w.tgCalls.filter((x) => x.method === "answerCallbackQuery").length, 1);
+});
+test("webhook: запрошення не дійшло (бот заблокований) → 📵 організатору, місце тримається", async () => {
+  const w = pollWorld(); w.blocked = [103];
+  await quiet(() => tgUpdate({ message: pm("/poll", 101) }));
+  assert.equal(tgState(w).poll.inv.p3.nobot, true);
+  assert.ok(w.sent.some((m) => m.chat_id === 101 && /📵 Вова без бота/.test(m.text)));
+});
+test("webhook: /out → причина → вихід зі складу; /who; не організатор — /poll заборонено", async () => {
+  const w = pollWorld();
+  await quiet(async () => {
+    await tgUpdate({ message: pm("/poll", 101) });
+    await tgUpdate({ callback_query: { id: "c", data: "y|g20261113", message: { message_id: 3, chat: { id: 102 } } } });
+    w.sent.length = 0;
+    await tgUpdate({ message: pm("/poll", 102) });
+    assert.equal(w.sent.at(-1).text, "Ця команда лише для організатора");
+    await tgUpdate({ message: pm("/who", 103) });
+    assert.match(w.sent.at(-1).text, /✅ Буде \(1\): Борис/);
+    await tgUpdate({ message: pm("/out", 102) });
+    assert.match(w.sent.at(-1).text, /Напиши причину/);
+    await tgUpdate({ message: pm("температура", 102) });
+  });
+  assert.deepEqual(dataState(w).games.find((x) => x.id === "g20261113").c, []);
+  assert.ok(w.sent.some((m) => m.chat_id === 101 && /🚫 Борис скасував: температура/.test(m.text)));
+});
+test("/notify sync: рахунок внесено → підсумок гри з оплатою (один раз), опитування закривається", async () => {
+  const data = fixture(); data.settings.org = "p1";
+  data.games[0].paid = ["p3"];
+  const w = mockWorld({ data, tg: { chats, poll: { game: "g1", open: true, startedAt: "x", announced: null, short: false, queueFront: [], inv: {} } } });
+  const call = async (b) => { const r = await worker.fetch(req("/notify", { method: "POST", headers: { Origin: "https://stock3.github.io", Authorization: "Bearer owner-token" }, body: JSON.stringify(b) }), env, ctxMock()); return r.json(); };
+  let j;
+  await quiet(async () => { j = await call({ mode: "sync", game: "g1" }); });
+  // g1 зіграна 3:2: жовті Аня (p1, організатор) і Борис — перемога; Вова оплатив — йому лише подяка; Гліб без бота
+  assert.deepEqual(j.sent.sort(), ["Аня", "Борис", "Вова"]);
+  assert.match(w.sent.find((m) => m.chat_id === 103).text, /Вова/);  assert.deepEqual(j.missing, ["Гліб"]);
+  assert.match(w.sent.find((m) => m.chat_id === 102).text, /^🏆 Борис, класна гра — перемога 3:2!/);
+  assert.equal(tgState(w).poll.open, false);
+  assert.ok(tgState(w).sent.g1.p2.pg);
+  await quiet(async () => { j = await call({ mode: "played", game: "g1" }); });
+  assert.deepEqual(j.sent, [], "вдруге не надсилає");
 });

@@ -10,11 +10,14 @@ export const WX = (/*WX*/function(){
   }
   function num(v){return typeof v==="number"&&isFinite(v)?v:null;}
   function med(a){a=a.filter(function(v){return v!=null;}).sort(function(x,y){return x-y;});return a.length?(a.length%2?a[(a.length-1)/2]:(a[a.length/2-1]+a[a.length/2])/2):null;}
-  /* json — відповідь Open-Meteo; date — "YYYY-MM-DD"; time — час гри "HH:MM"; warn — поріг ймовірності опадів, % */
-  function build(json,date,time,warn){
-    var h=(json&&json.hourly)||{}, t=h.time||[], hh=(/^(\d{1,2})/.exec(time||"")||[0,21])[1], at=date+"T"+("0"+(+hh)).slice(-2)+":00";
+  function hh2(n){return ("0"+n).slice(-2)+":00";}
+  /* json — відповідь Open-Meteo; date — "YYYY-MM-DD"; time — час гри "HH:MM";
+     warn — поріг «Погода під питанням», %; dry — поріг «сухо» (усі моделі нижче), % */
+  function build(json,date,time,warn,dry){
+    var h=(json&&json.hourly)||{}, t=h.time||[], hh=+(/^(\d{1,2})/.exec(time||"")||[0,21])[1], at=date+"T"+hh2(hh);
     var gi=t.indexOf(at), di=[];
-    t.forEach(function(x,i){var hr=+x.slice(11,13); if(x.slice(0,10)===date&&hr>=8&&hr<=20)di.push(i);});
+    /* «вдень» — з 08:00 до години перед грою */
+    t.forEach(function(x,i){var hr=+x.slice(11,13); if(x.slice(0,10)===date&&hr>=8&&hr<hh)di.push(i);});
     var models=MODELS.map(function(m){
       function v(k,i){var a=h[k+"_"+m[0]];return a&&i>=0?num(a[i]):null;}
       var r={name:m[1],ok:gi>=0&&v("temperature_2m",gi)!=null};
@@ -31,7 +34,10 @@ export const WX = (/*WX*/function(){
     /* більшість моделей з даними: 2 з 3, з 2 — обидві */
     var pv=ok.map(function(m){return m.at.pp;}).filter(function(v){return v!=null;}), votes=pv.filter(function(v){return v>=(+warn||90);}).length;
     var byPp=ok.slice().sort(function(a,b){return (a.at.pp||0)-(b.at.pp||0);}), mid=byPp[Math.floor((byPp.length-1)/2)];
-    return {date:date,time:("0"+(+hh)).slice(-2)+":00",models:models,day:day,any:ok.length>0,warn:pv.length>0&&votes>pv.length/2,
+    var isWarn=pv.length>0&&votes>pv.length/2, dryN=dry==null||dry===""?40:+dry;
+    /* вердикт на годину гри: warn — більшість моделей ≥ warn; dry — усі < dry; інакше rain */
+    var verdict=!pv.length?null:isWarn?"warn":pv.every(function(v){return v<dryN;})?"dry":"rain";
+    return {date:date,time:hh2(hh),from:"08:00",to:hh2(Math.max(8,hh-1)),models:models,day:day,any:ok.length>0,warn:isWarn,verdict:verdict,
       med:ok.length?{code:mid.at.code,t:med(ok.map(function(m){return m.at.t;})),pp:med(pv),wind:med(ok.map(function(m){return m.at.wind;}))}:null};
   }
   function deg(v){if(v==null)return "?°";v=Math.round(v);return (v>0?"+":v<0?"−":"")+Math.abs(v)+"°";}
@@ -45,9 +51,15 @@ export const WX = (/*WX*/function(){
   }
   function head(r,city){var d=new Date(r.date+"T00:00:00Z");return "🌦 "+DAYS[d.getUTCDay()]+", "+d.getUTCDate()+" "+MON[d.getUTCMonth()]+(city?" · "+city:"");}
   function dayLine(r){
-    var d=r.day; if(!d)return "День: немає прогнозу";
+    var d=r.day, lbl="Вдень ("+r.from+"–"+r.to+"): "; if(!d)return lbl+"немає прогнозу";
     var rain=(d.pp==null&&d.mm<0.05)||(d.pp===0&&d.mm<0.05)?"без опадів":(d.tmin<=0?"опади":"дощ")+" до "+pct(d.pp)+" ("+mm(d.mm)+" мм)";
-    return "День: "+deg(d.tmin).replace("°","")+"…"+deg(d.tmax)+", "+rain+", вітер до "+ms(d.wind);
+    return lbl+deg(d.tmin).replace("°","")+"…"+deg(d.tmax)+", "+rain+", вітер до "+ms(d.wind);
+  }
+  function gameHead(r){return "⚽ На гру, "+r.time+":";}
+  /* v — тексти {dry,rain,warn} з налаштувань */
+  function verdictText(r,v){
+    v=v||{}; var d={dry:"✅ Схоже, зіграємо сухими",rain:"☔ Можливий дощ",warn:"⚠️ Погода під питанням"};
+    return r.verdict?(v[r.verdict]||d[r.verdict]):"";
   }
   function modelLine(m,hour,pad){
     var n=pad?(m.name+"     ").slice(0,5)+" ":m.name+" ";
@@ -56,10 +68,9 @@ export const WX = (/*WX*/function(){
   }
   /* повний текст (бот) */
   function text(r,o){
-    var hour=+r.time.slice(0,2), L=[head(r,o.city),dayLine(r),"","О "+r.time+":"];
+    var hour=+r.time.slice(0,2), L=[head(r,o.city),dayLine(r),"",gameHead(r)], v=verdictText(r,o.verdicts);
     r.models.forEach(function(m){L.push(modelLine(m,hour,true));});
-    if(r.warn)L.push("","⚠️ Погода під питанням");
-    L.push((r.warn?"":"\n")+"Оновлено "+o.updated+(o.site?" · "+o.site:""));
+    if(v)L.push("",v);
     return L.join("\n");
   }
   /* один рядок (картка гри): медіана моделей */
@@ -67,5 +78,5 @@ export const WX = (/*WX*/function(){
     var m=r.med; if(!m)return "";
     return icon(m.code,+r.time.slice(0,2))+" "+deg(m.t)+" · "+pct(m.pp)+" · "+ms(m.wind)+" о "+r.time+(r.warn?" ⚠️":"");
   }
-  return {url:url,build:build,text:text,line:line,head:head,dayLine:dayLine,modelLine:modelLine,icon:icon};
+  return {url:url,build:build,text:text,line:line,head:head,dayLine:dayLine,gameHead:gameHead,verdictText:verdictText,modelLine:modelLine,icon:icon};
 }/*/WX*/)();

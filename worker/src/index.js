@@ -1,14 +1,16 @@
 // Telegram-бот «Пʼятниця 5×5» на Cloudflare Workers: webhook (миттєві відповіді) + cron кожні 15 хв.
 // Власного сховища немає: data.json, index.html (блок DEF) і tg.json читаються й пишуться в репозиторії
-// через GitHub Contents API. Логіка — у core.js; тут лише мережа.
+// через GitHub Contents API. Логіка — у core.js і poll.js (опитування); тут лише мережа.
 //
 // Ендпоінти:
 //   POST /tg      — webhook Telegram (перевірка X-Telegram-Bot-Api-Secret-Token)
-//   POST /notify  — кнопки сайту {mode: thanks|remind|gather|cancel, player?, game?}; Authorization: Bearer <GitHub-токен редактора>
+//   POST /notify  — кнопки сайту {mode: thanks|remind|gather|cancel|sync|played, player?, game?}; Authorization: Bearer <GitHub-токен редактора>
+//                   sync/played — сайт щойно зберіг data.json: звірити опитування, надіслати підсумок гри й подяки
 //   GET  /setup?key=TG_SECRET — підключити webhook і меню команд
 //   GET  /health  — «ok»
 // Секрети: TG_TOKEN, GH_TOKEN, TG_SECRET. Змінні: GH_REPO, GH_BRANCH, SITE_ORIGIN (+ TG_API, GH_API, OM_API — лише для тестів).
 import * as core from "./core.js";
+import * as poll from "./poll.js";
 
 const UA = "friday55-bot";
 const DEF_TTL = 5 * 60e3;
@@ -44,22 +46,70 @@ async function webhook(request, env, ctx) {
   try { upd = await request.json(); } catch {}
   // Telegram чекає швидкої відповіді; обробка — після неї
   if (upd && upd.message) ctx.waitUntil(onUpdate(env, upd).catch((e) => console.log("webhook:", e.message)));
+  else if (upd && upd.callback_query) ctx.waitUntil(onCallback(env, upd.callback_query).catch((e) => console.log("webhook:", e.message)));
   return text("ok");
 }
 async function onUpdate(env, upd) {
   const st = await load(env);
   const C = ctx(env, st);
   const r = core.onMessage(C, upd.message);
-  if (r.weather) {
-    let w = null;
-    try {
-      const res = await fetch(core.WX.url(C.S, env.OM_API));
-      if (res.ok) w = await res.json(); else console.log("Open-Meteo:", res.status);
-    } catch (e) { console.log("Open-Meteo:", e.message); }
-    await tgSend(env, r.weather.chat, core.weatherReply(C, w));
-    return;
-  }
+  if (r.weather) return sendWeather(env, C, r.weather.chat);
+  if (r.poll) return pollRun(env, r.poll);
   await run(env, st, C, r);
+}
+// Кнопки під повідомленнями опитування. На кожен callback треба відповісти (answerCallbackQuery), інакше крутиться годинник.
+async function onCallback(env, q) {
+  const msg = q.message || {};
+  const ev = { t: "cb", id: q.id, chat: (msg.chat && msg.chat.id) ?? (q.from && q.from.id), msg: msg.message_id, data: q.data || "" };
+  try { await pollRun(env, ev); }
+  catch (e) {
+    await tgCall(env, "answerCallbackQuery", { callback_query_id: q.id, text: "Щось пішло не так, спробуй ще раз 🙏" }).catch(() => {});
+    throw e;
+  }
+}
+async function sendWeather(env, C, chat, date) {
+  let w = null;
+  try {
+    const res = await fetch(core.WX.url(C.S, env.OM_API));
+    if (res.ok) w = await res.json(); else console.log("Open-Meteo:", res.status);
+  } catch (e) { console.log("Open-Meteo:", e.message); }
+  await tgSend(env, chat, core.weatherReply(C, w, date));
+}
+
+// ---------- опитування ----------
+// Крок опитування як транзакція: прочитати data.json і tg.json → poll.step → записати data.json, потім tg.json.
+// Конфлікт запису (409/422) — перечитати й порахувати заново (до 3 спроб). Повідомлення — лише після запису.
+// Запрошення, що не дійшли (бот заблокований), — окремим кроком {t:"nobot"}: гравець тримає місце, організатору — 📵.
+async function pollRun(env, ev) {
+  let st, C, r;
+  for (let attempt = 1; ; attempt++) {
+    st = await load(env); C = ctx(env, st); r = poll.step(C, ev);
+    try {
+      if (r.data) await ghWrite(env, "data.json", r.data, st.dsha, "Бот: " + r.dnote);
+      if (r.tg) await ghWrite(env, "tg.json", r.tg, st.sha, "Бот: " + r.note);
+      break;
+    } catch (e) {
+      if (e.conflict && attempt < 3) { console.log(`опитування: конфлікт (${e.status}), спроба ${attempt + 1}`); continue; }
+      throw e;
+    }
+  }
+  if (r.answer) {
+    await tgCall(env, "answerCallbackQuery", { callback_query_id: r.answer.id, ...(r.answer.text ? { text: r.answer.text } : {}) })
+      .catch((e) => console.log("Telegram answerCallbackQuery:", e.message));
+  }
+  for (const e of r.edits) {
+    await tgCall(env, "editMessageText", { chat_id: e.chat, message_id: e.msg, text: e.text, ...(e.kb ? { reply_markup: e.kb } : {}) })
+      .catch((err) => { if (!/not modified/i.test(err.message)) console.log("Telegram editMessageText:", err.message); });
+  }
+  const sent = [], failed = [], nobot = [];
+  for (const m of r.msgs) {
+    const ok = await tgSend(env, m.chat, m.text, m.kb);
+    if (m.pid && !m.admin) (ok ? sent : failed).push(m.name);
+    if (!ok && m.inv) nobot.push(m.inv);
+  }
+  if (r.weather) await sendWeather(env, C, r.weather.chat, r.weather.date);
+  if (nobot.length) await pollRun(env, { t: "nobot", pids: nobot });
+  return { sent, failed };
 }
 
 // ---------- кнопки сайту ----------
@@ -89,6 +139,15 @@ async function notify(request, env) {
   if (mode === "thanks") r = core.thanks(C);
   else if (mode === "remind") r = core.reminders(C, { manual: true, player: String(b.player || "") });
   else if (mode === "gather" || mode === "cancel") r = core.announce(C, mode, String(b.game || ""));
+  else if (mode === "sync" || mode === "played") {
+    // спершу опитування (може змінити data.json), потім підсумок гри й подяки на свіжих даних
+    const a = await pollRun(env, { t: "sync" });
+    const st2 = await load(env), C2 = ctx(env, st2);
+    const pg = core.postGame(C2, b.game ? String(b.game) : ""), th = core.thanks(C2);
+    const res = await run(env, st2, C2, { msgs: [...pg.msgs, ...th.msgs], ops: [] });
+    console.log(`/notify ${mode}: надіслано ${a.sent.length + res.sent.length}, помилок ${a.failed.length + res.failed.length}`);
+    return json({ ok: true, sent: [...a.sent, ...res.sent], missing: [...pg.missing, ...a.failed, ...res.failed] }, 200, h);
+  }
   else return json({ ok: false, error: "Невідомий режим" }, 400, h);
   if (r.error) return json({ ok: false, error: r.error }, 404, h);
   const res = await run(env, st, C, r);
@@ -98,10 +157,12 @@ async function notify(request, env) {
 
 // ---------- розклад ----------
 async function cron(env) {
+  // опитування: автозапуск, «скажу пізніше», нагадування тим, хто мовчить, закриття в час гри
+  try { await pollRun(env, { t: "tick" }); } catch (e) { console.log("cron опитування:", e.message); }
   const st = await load(env), C = ctx(env, st);
-  // подяки — страховка, якщо сайт не достукався до /notify; нагадування — за розкладом з Налаштувань
-  const a = core.thanks(C), b = core.reminders(C);
-  await run(env, st, C, { msgs: [...a.msgs, ...b.msgs], ops: [...a.ops, ...b.ops] });
+  // подяки й підсумки гри — страховка, якщо сайт не достукався до /notify; нагадування — за розкладом з Налаштувань
+  const a = core.thanks(C), p = core.postGame(C), b = core.reminders(C);
+  await run(env, st, C, { msgs: [...a.msgs, ...p.msgs, ...b.msgs], ops: [...a.ops, ...b.ops] });
 }
 
 // ---------- налаштування webhook ----------
@@ -111,8 +172,11 @@ async function setup(url, env) {
   const step = async (name, method, body) => {
     try { await tgCall(env, method, body); lines.push(`${name}: OK`); } catch (e) { lines.push(`${name}: ПОМИЛКА — ${e.message}`); }
   };
-  await step("setWebhook " + url.origin + "/tg", "setWebhook", { url: url.origin + "/tg", secret_token: env.TG_SECRET, allowed_updates: ["message"], drop_pending_updates: false });
+  await step("setWebhook " + url.origin + "/tg", "setWebhook", { url: url.origin + "/tg", secret_token: env.TG_SECRET, allowed_updates: ["message", "callback_query"], drop_pending_updates: false });
+  // /poll, /endpoll, /no — команди організатора, у меню їх немає
   await step("setMyCommands", "setMyCommands", { commands: [
+    { command: "who", description: "Хто йде" },
+    { command: "out", description: "Не зможу" },
     { command: "status", description: "Мій борг за ігри" },
     { command: "weather", description: "Погода на пʼятницю" },
     { command: "stop", description: "Не писати мені" },
@@ -132,7 +196,7 @@ function ctx(env, st) { return core.context({ data: st.data, DEF: st.DEF, tg: st
 async function load(env) {
   const [d, t, DEF] = await Promise.all([ghRead(env, "data.json"), ghRead(env, "tg.json"), loadDef(env)]);
   if (!d) throw new Error("data.json не знайдено");
-  return { data: JSON.parse(d.text), DEF, tg: t ? JSON.parse(t.text) : {}, sha: t ? t.sha : null };
+  return { data: JSON.parse(d.text), dsha: d.sha, DEF, tg: t ? JSON.parse(t.text) : {}, sha: t ? t.sha : null };
 }
 async function loadDef(env) {
   if (defCache && Date.now() - defCache.at < DEF_TTL) return defCache.DEF;
@@ -146,7 +210,7 @@ async function loadDef(env) {
 async function run(env, st, C, r) {
   const ops = [...(r.ops || [])], sent = [], failed = [];
   for (const m of r.msgs || []) {
-    const ok = await tgSend(env, m.chat, m.text);
+    const ok = await tgSend(env, m.chat, m.text, m.kb);
     if (m.pid) (ok ? sent : failed).push(m.name);
     if (ok) ops.push(...(m.ops || []));
   }
@@ -175,6 +239,17 @@ async function saveTg(env, st, ops, today) {
   }
 }
 
+// Записати файл цілком (крок опитування). Конфлікт — помилка з conflict: true, решту вирішує pollRun.
+async function ghWrite(env, file, obj, sha, message) {
+  const body = { message, content: b64(JSON.stringify(obj, null, 1) + "\n"), branch: env.GH_BRANCH || "main" };
+  if (sha) body.sha = sha;
+  const r = await fetch(`${ghApi(env)}/repos/${env.GH_REPO}/contents/${file}`, { method: "PUT", headers: ghHeaders(env), body: JSON.stringify(body) });
+  if (r.ok) return;
+  const e = new Error(`GitHub запис ${file}: ${r.status}`);
+  e.status = r.status; e.conflict = r.status === 409 || r.status === 422;
+  throw e;
+}
+
 // ---------- GitHub ----------
 const ghApi = (env) => env.GH_API || "https://api.github.com";
 const ghHeaders = (env) => ({ Authorization: "Bearer " + env.GH_TOKEN, Accept: "application/vnd.github+json", "X-GitHub-Api-Version": "2022-11-28", "User-Agent": UA, "content-type": "application/json" });
@@ -197,7 +272,7 @@ async function tgCall(env, method, body) {
   if (!j.ok) throw new Error(j.description || "HTTP " + r.status);
   return j.result;
 }
-async function tgSend(env, chat, textBody) {
-  try { await tgCall(env, "sendMessage", { chat_id: chat, text: textBody, disable_web_page_preview: true }); return true; }
+async function tgSend(env, chat, textBody, kb) {
+  try { await tgCall(env, "sendMessage", { chat_id: chat, text: textBody, disable_web_page_preview: true, ...(kb ? { reply_markup: kb } : {}) }); return true; }
   catch (e) { console.log("Telegram sendMessage:", e.message); return false; }
 }
