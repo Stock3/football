@@ -129,9 +129,34 @@ export function context({ data, DEF, tg, now, site, rand }) {
   const T = kyiv(now);
   const players = Object.fromEntries(data.players.map((p) => [p.id, p]));
   const C = { data, DEF, S, T, now, site: site || "", tg: normState(tg), players, rand: rand || Math.random };
-  C.games = data.games.filter((g) => tracked(C, g)).sort((a, b) => (a.date < b.date ? -1 : a.date > b.date ? 1 : 0));
+  C.games = data.games.filter((g) => tracked(C, g) && inTestScope(C, g)).sort((a, b) => (a.date < b.date ? -1 : a.date > b.date ? 1 : 0));
   return C;
 }
+// ---------- режим тесту ----------
+// settings.testMode: усе, що мало піти гравцям, іде в чат адміністратора (settings.org) з позначкою «👤 для Імʼя:».
+// Гравці без бота вважаються підключеними (їм теж «пише» адмін). Реальним гравцям не йде нічого.
+export const testOn = (C) => C.S.testMode === true;
+export const adminChat = (C) => { const a = C.S.org && C.tg.chats[C.S.org]; return a ? a.id : null; };
+// У режимі тесту події не від адміна ігноруються: реальні гравці нічого не отримують і нічого не змінюють
+export const testBlocked = (C, chatId) => testOn(C) && (adminChat(C) == null || chatId !== adminChat(C));
+// Куди писати гравцю: звичайно — у його чат; у режимі тесту — завжди адміну (null, якщо адмін без бота)
+export function chatFor(C, pid) {
+  if (testOn(C)) { const a = adminChat(C); return a != null ? { id: a } : null; }
+  const ch = C.tg.chats[pid];
+  return ch ? { id: ch.id } : null;
+}
+// Гравець за імʼям: без урахування регістру, точний збіг або унікальний початок. Повертає масив збігів.
+export function findPlayers(C, q) {
+  q = String(q || "").trim().toLowerCase();
+  if (!q) return [];
+  const by = (f) => C.data.players.filter((p) => f(String(p.name).toLowerCase()));
+  const exact = by((n) => n === q);
+  return exact.length ? exact : by((n) => n.startsWith(q));
+}
+// У режимі тесту подяки, підсумки й нагадування стосуються лише тестової гри (гри з опитування):
+// так не спалюються прапорці «вже надіслано» для реальних ігор.
+const inTestScope = (C, g) => !testOn(C) || (!!C.tg.poll && C.tg.poll.game === g.id);
+
 export const played = (g) => !g.x && g.sy != null && g.sb != null && g.sy !== "" && g.sb !== ""; // x — скасована гра
 const tracked = (C, g) => played(g) && !!C.S.payFrom && g.date >= C.S.payFrom;
 // платять усі гравці гри, крім організатора
@@ -166,28 +191,42 @@ export function gameVars(C, g, pid) {
     list: ids.map((id) => nameOf(C, id)).join(", ") + (guests ? ` + ${guests} ${guests === 1 ? "гість" : guests < 5 ? "гості" : "гостей"}` : ""), site: C.site,
   };
 }
-const toPlayer = (C, pid, text, ops) => ({ chat: C.tg.chats[pid].id, pid, name: nameOf(C, pid), text, ops: ops || [] });
+const toPlayer = (C, pid, text, ops) => ({ chat: chatFor(C, pid).id, pid, name: nameOf(C, pid), text, ops: ops || [] });
 
 // ---------- 1. вхідні повідомлення ----------
 // Повертає {msgs, ops}, {weather: {chat}} — прогноз index.js дотягує з Open-Meteo сам,
 // або {poll: подія} — опитування обробляє poll.step (index.js).
-export function onMessage(C, m) {
+// as — id гравця, від імені якого адмін виконує команду (/as, лише в режимі тесту): відповіді йдуть адміну з позначкою «для Імʼя».
+export function onMessage(C, m, as) {
   const out = { msgs: [], ops: [] };
   if (!m || typeof m.text !== "string" || !m.chat || m.chat.type !== "private") return out;
   const text = m.text.trim(), chatId = m.chat.id, uname = (m.from && m.from.username) || "";
-  const say = (t) => { out.msgs.push({ chat: chatId, text: t }); return out; };
+  const say = (t) => { out.msgs.push({ chat: chatId, text: t, ...(as ? { as } : {}) }); return out; };
   const [cmd, ...rest] = text.split(/\s+/), arg = rest[0];
   const c = (cmd || "").toLowerCase().replace(/@.*$/, "");
   const siteLine = C.site ? "\n" + C.site : "";
-  const pid = Object.keys(C.tg.chats).find((k) => C.tg.chats[k].id === chatId);
+  const pid = as || Object.keys(C.tg.chats).find((k) => C.tg.chats[k].id === chatId);
   const unknown = "Я тебе ще не знаю 🙂 Натисни /start або «Підключити Telegram-бота» у своєму профілі на сайті.";
   const P = C.tg.poll;
+  const asEv = as ? { as } : {};
+  // команди режиму тесту (лише адмін)
+  if (!as && (c === "/as" || c === "/testreset")) {
+    if (!pid || pid !== C.S.org) return say(C.S.say.adminOnly);
+    if (!testOn(C)) return say("Режим тесту вимкнено. Увімкни його: Налаштування → Telegram-бот → «Режим тесту»");
+    if (c === "/testreset") return { ...out, poll: { t: "testreset", chat: chatId } };
+    const inner = text.replace(/^\S+\s+\S+\s*/, "");
+    if (!arg || !inner) return say("Напиши так: /as Імʼя команда або текст, напр. /as Коля /out");
+    const hit = findPlayers(C, arg);
+    if (hit.length !== 1) return say(hit.length ? `Кілька збігів: ${hit.map((p) => p.name).join(", ")} — уточни імʼя` : `Не знайшов гравця «${arg}»`);
+    return onMessage(C, { ...m, text: inner }, hit[0].id);
+  }
+  if (as && (c === "/start" || c === "/stop" || c === "/as" || c === "/testreset")) return say("Ця команда не працює через /as (вона змінила б реальне підключення або сам тест)");
   // після /out бот чекає причину: наступне повідомлення (не команда) — це причина, /skip — без причини
   if (pid && P && P.wait && P.wait[pid]) {
-    if (c === "/skip") return { ...out, poll: { t: "out", chat: chatId, reason: "" } };
-    if (!text.startsWith("/")) return { ...out, poll: { t: "out", chat: chatId, reason: text.slice(0, 200) } };
+    if (c === "/skip") return { ...out, poll: { t: "out", chat: chatId, reason: "", ...asEv } };
+    if (!text.startsWith("/")) return { ...out, poll: { t: "out", chat: chatId, reason: text.slice(0, 200), ...asEv } };
   }
-  if (c === "/weather" || /^погода/i.test(text)) return { ...out, weather: { chat: chatId } }; // будь-кому, навіть не підключеним
+  if (c === "/weather" || /^погода/i.test(text)) return { ...out, weather: { chat: chatId, ...asEv } }; // будь-кому, навіть не підключеним
   if (c === "/start") {
     const p = arg ? C.players[arg] : uname ? C.data.players.find((x) => x.tg && x.tg.toLowerCase() === uname.toLowerCase()) : null;
     if (arg && !p) return say(`Не знайшов такого гравця 🤔 Відкрий свій профіль на сайті й натисни «Підключити Telegram-бота».${siteLine}`);
@@ -204,15 +243,15 @@ export function onMessage(C, m) {
   // команди організатора (немає в меню); організатор — гравець settings.org з підключеним ботом
   if (c === "/poll" || c === "/endpoll" || c === "/no") {
     if (!pid || pid !== C.S.org) return say(C.S.say.adminOnly);
-    return { ...out, poll: { t: c === "/poll" ? "start" : c === "/endpoll" ? "end" : "no", chat: chatId, arg: rest.join(" ") } };
+    return { ...out, poll: { t: c === "/poll" ? "start" : c === "/endpoll" ? "end" : "no", chat: chatId, arg: rest.join(" "), ...asEv } };
   }
   if (c === "/who" || /^хто йде/i.test(text)) {
     if (!pid) return say(unknown);
-    return { ...out, poll: { t: "who", chat: chatId } };
+    return { ...out, poll: { t: "who", chat: chatId, ...asEv } };
   }
   if (c === "/out" || /^не зможу/i.test(text)) {
     if (!pid) return say(unknown);
-    return { ...out, poll: { t: "ask", chat: chatId } };
+    return { ...out, poll: { t: "ask", chat: chatId, ...asEv } };
   }
   if (c === "/status" || /^борг/i.test(text) || /^оплат/i.test(text)) {
     if (!pid) return say(unknown);
@@ -241,10 +280,10 @@ export function thanks(C) {
   if (!C.S.payFrom) return out;
   const byPlayer = {};
   for (const g of [...C.data.games].sort((a, b) => (a.date < b.date ? -1 : 1))) {
-    if (g.x || g.date < C.S.payFrom || dayDiff(g.date, C.T.date) > THANKS_WINDOW_DAYS) continue;
+    if (g.x || g.date < C.S.payFrom || dayDiff(g.date, C.T.date) > THANKS_WINDOW_DAYS || !inTestScope(C, g)) continue;
     const pl = played(g);
     for (const pid of gameIds(g)) {
-      if (!(g.paid || []).includes(pid) || !C.tg.chats[pid] || sentGet(C.tg, g.id, pid).thx) continue;
+      if (!(g.paid || []).includes(pid) || !chatFor(C, pid) || sentGet(C.tg, g.id, pid).thx) continue;
       const b = (byPlayer[pid] ??= { done: [], pre: [] });
       (pl ? b.done : b.pre).push(g);
     }
@@ -269,7 +308,7 @@ export function postGame(C, gid) {
     if (age < 0 || age > POSTGAME_DAYS) continue;
     for (const pid of [...new Set([...(g.y || []), ...(g.b || [])])]) {
       if ((g.paid || []).includes(pid) || sentGet(C.tg, g.id, pid).pg) continue;
-      if (!C.tg.chats[pid]) { out.missing.push(nameOf(C, pid)); continue; }
+      if (!chatFor(C, pid)) { out.missing.push(nameOf(C, pid)); continue; }
       const my = (g.y || []).includes(pid) ? +g.sy : +g.sb, op = (g.y || []).includes(pid) ? +g.sb : +g.sy;
       const list = my > op ? C.S.postW : my < op ? C.S.postL : C.S.postD;
       const v = { name: nameOf(C, pid), date: dmon(g.date), score: `${my}:${op}`, sum: C.S.price, ...payVars(C) };
@@ -304,11 +343,11 @@ export function reminders(C, { manual = false, player = "" } = {}) {
   const slots = manual ? [] : dueSlots(C);
   if (!manual && !slots.length) return out;
   const key = manual ? T.date + " manual" : slots.at(-1);
-  const ids = manual ? (player ? [player] : [...new Set(C.games.flatMap((g) => payers(C, g)))]) : Object.keys(C.tg.chats);
+  const ids = manual ? (player ? [player] : [...new Set(C.games.flatMap((g) => payers(C, g)))]) : testOn(C) ? C.data.players.map((p) => p.id) : Object.keys(C.tg.chats);
   for (const pid of ids) {
     const list = unpaidOf(C, pid);
     if (!list.length) continue;
-    if (!C.tg.chats[pid]) { if (manual) out.missing.push(nameOf(C, pid)); continue; }
+    if (!chatFor(C, pid)) { if (manual) out.missing.push(nameOf(C, pid)); continue; }
     if (!manual) {
       // уже нагадали в цей слот, вручну сьогодні або за старим форматом (лише дата)
       if (list.some((g) => sentGet(C.tg, g.id, pid).r.some((x) => slots.includes(x) || x === T.date || x === T.date + " manual"))) continue;
@@ -324,7 +363,7 @@ export function reminders(C, { manual = false, player = "" } = {}) {
     }
     out.msgs.push(toPlayer(C, pid, fill(pick(C, C.S.reminders), vars(C, pid, list)), list.map((g) => ({ op: "r", gid: g.id, pid, key }))));
   }
-  if (slots.length) out.ops.push({ op: "slots", keys: slots });
+  if (slots.length && !testOn(C)) out.ops.push({ op: "slots", keys: slots }); // у тесті слот не «спалюємо»: дедуплікація — по r у грі
   return out;
 }
 
@@ -338,7 +377,7 @@ export function announce(C, kind, gid) {
   const texts = C.S[kind] || [];
   if (!texts.length) return { ...out, error: "Немає текстів у налаштуваннях" };
   for (const pid of gameIds(g)) {
-    if (C.tg.chats[pid]) out.msgs.push(toPlayer(C, pid, fill(pick(C, texts), gameVars(C, g, pid))));
+    if (chatFor(C, pid)) out.msgs.push(toPlayer(C, pid, fill(pick(C, texts), gameVars(C, g, pid))));
     else out.missing.push(nameOf(C, pid));
   }
   return out;

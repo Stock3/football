@@ -8,6 +8,9 @@
 //                   sync/played — сайт щойно зберіг data.json: звірити опитування, надіслати підсумок гри й подяки
 //   GET  /setup?key=TG_SECRET — підключити webhook і меню команд
 //   GET  /health  — «ok»
+// Режим тесту (settings.testMode): усі повідомлення гравцям іде адміну (settings.org) з позначкою «👤 для Імʼя:», кнопки в них діють
+//   від імені гравця (callback_data «дія|гра|гравець»), /as Імʼя … виконує команду від імені гравця; повідомлення від не-адміна ігноруються.
+//   Усі відправки гравцям — лише через deliver()/routeEdit(): там єдине місце, де вирішується, куди йде повідомлення.
 // Секрети: TG_TOKEN, GH_TOKEN, TG_SECRET. Змінні: GH_REPO, GH_BRANCH, SITE_ORIGIN (+ TG_API, GH_API, OM_API — лише для тестів).
 import * as core from "./core.js";
 import * as poll from "./poll.js";
@@ -52,8 +55,9 @@ async function webhook(request, env, ctx) {
 async function onUpdate(env, upd) {
   const st = await load(env);
   const C = ctx(env, st);
+  if (core.testBlocked(C, upd.message.chat && upd.message.chat.id)) { console.log("режим тесту: ігнорую повідомлення не від адміна"); return; }
   const r = core.onMessage(C, upd.message);
-  if (r.weather) return sendWeather(env, C, r.weather.chat);
+  if (r.weather) return sendWeather(env, C, r.weather.chat, r.weather.date, r.weather.as);
   if (r.poll) return pollRun(env, r.poll);
   await run(env, st, C, r);
 }
@@ -67,13 +71,43 @@ async function onCallback(env, q) {
     throw e;
   }
 }
-async function sendWeather(env, C, chat, date) {
+async function sendWeather(env, C, chat, date, as) {
   let w = null;
   try {
     const res = await fetch(core.WX.url(C.S, env.OM_API));
     if (res.ok) w = await res.json(); else console.log("Open-Meteo:", res.status);
   } catch (e) { console.log("Open-Meteo:", e.message); }
-  await tgSend(env, chat, core.weatherReply(C, w, date));
+  await deliver(env, C, { chat, text: core.weatherReply(C, w, date), ...(as ? { as } : {}) });
+}
+
+// ---------- режим тесту: куди насправді йде повідомлення ----------
+// Звичайно — туди, куди просили. У режимі тесту — завжди в чат адміна: для гравця (pid) або «від імені гравця» (as)
+// з позначкою «👤 для Імʼя:» (+ «немає бота», якщо в нього немає бота), кнопки несуть id гравця. Без адміна-з-ботом — нікуди.
+const tagKb = (kb, pid) => kb && { inline_keyboard: kb.inline_keyboard.map((row) => row.map((b) => {
+  const d = b.callback_data ? b.callback_data + "|" + pid : "";
+  return d && new TextEncoder().encode(d).length <= 64 ? { ...b, callback_data: d } : b;
+})) };
+const forLabel = (C, pid) => "👤 для " + core.nameOf(C, pid) + (C.tg.chats[pid] ? "" : " (немає бота)") + ":\n";
+function route(C, m) {
+  if (!core.testOn(C)) return { chat: m.chat, text: m.text, kb: m.kb };
+  const A = core.adminChat(C);
+  if (A == null) return null;
+  const pid = m.pid || m.as;
+  if (m.admin || !pid || pid === C.S.org) return { chat: A, text: m.text, kb: m.kb }; // уже адміну: без змін
+  return { chat: A, text: forLabel(C, pid) + m.text, kb: tagKb(m.kb, pid) };
+}
+async function deliver(env, C, m) {
+  const d = route(C, m);
+  if (!d) { console.log("режим тесту: адміна без бота немає — повідомлення не надіслано"); return false; }
+  return tgSend(env, d.chat, d.text, d.kb);
+}
+// Редагування повідомлення: у режимі тесту — те саме, що в адмін-чаті (позначка й кнопки від імені гравця зберігаються)
+function routeEdit(C, e) {
+  if (!core.testOn(C)) return e;
+  const A = core.adminChat(C);
+  if (A == null || e.chat !== A) return null;
+  if (!e.pid || e.pid === C.S.org) return e;
+  return { ...e, text: forLabel(C, e.pid) + e.text, kb: tagKb(e.kb, e.pid) };
 }
 
 // ---------- опитування ----------
@@ -97,17 +131,19 @@ async function pollRun(env, ev) {
     await tgCall(env, "answerCallbackQuery", { callback_query_id: r.answer.id, ...(r.answer.text ? { text: r.answer.text } : {}) })
       .catch((e) => console.log("Telegram answerCallbackQuery:", e.message));
   }
-  for (const e of r.edits) {
+  for (const e0 of r.edits) {
+    const e = routeEdit(C, e0);
+    if (!e) continue;
     await tgCall(env, "editMessageText", { chat_id: e.chat, message_id: e.msg, text: e.text, ...(e.kb ? { reply_markup: e.kb } : {}) })
       .catch((err) => { if (!/not modified/i.test(err.message)) console.log("Telegram editMessageText:", err.message); });
   }
   const sent = [], failed = [], nobot = [];
   for (const m of r.msgs) {
-    const ok = await tgSend(env, m.chat, m.text, m.kb);
+    const ok = await deliver(env, C, m);
     if (m.pid && !m.admin) (ok ? sent : failed).push(m.name);
     if (!ok && m.inv) nobot.push(m.inv);
   }
-  if (r.weather) await sendWeather(env, C, r.weather.chat, r.weather.date);
+  if (r.weather) await sendWeather(env, C, r.weather.chat, r.weather.date, r.weather.as);
   if (nobot.length) await pollRun(env, { t: "nobot", pids: nobot });
   return { sent, failed };
 }
@@ -210,7 +246,7 @@ async function loadDef(env) {
 async function run(env, st, C, r) {
   const ops = [...(r.ops || [])], sent = [], failed = [];
   for (const m of r.msgs || []) {
-    const ok = await tgSend(env, m.chat, m.text, m.kb);
+    const ok = await deliver(env, C, m);
     if (m.pid) (ok ? sent : failed).push(m.name);
     if (ok) ops.push(...(m.ops || []));
   }

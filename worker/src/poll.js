@@ -14,8 +14,11 @@
 //   wait — після /out чекаємо причину; empty — організатору вже сказано, що черга закінчилась.
 //
 // Події ev.t: start (/poll або автозапуск), end (/endpoll), cb (кнопка), ask (/out), out (причина або /skip),
-//   who (/who), no (/no Імʼя — організатор відмічає «не зможе»), sync (сайт зберіг дані), tick (cron), nobot (не дійшло запрошення).
-import { fill, pick, nameOf, gameIds, gameVars, dmon, played, inQuiet, nextFriday, addDays, gameTime, DAYS } from "./core.js";
+//   who (/who), no (/no Імʼя — організатор відмічає «не зможе»), sync (сайт зберіг дані), tick (cron), nobot (не дійшло запрошення),
+//   testreset (/testreset — лише в режимі тесту: скинути опитування й прапорці надсилання тестової гри).
+// Режим тесту (settings.testMode): ev.as — id гравця, від імені якого діє адмін (/as; кнопка в перенаправленому повідомленні несе id
+//   гравця третьою частиною callback_data «дія|гра|гравець»). Події не з чату адміна ігноруються.
+import { fill, pick, nameOf, gameIds, gameVars, dmon, played, inQuiet, nextFriday, addDays, gameTime, DAYS, chatFor, testOn, testBlocked } from "./core.js";
 
 export const REMIND_AFTER_H = 3;
 const H = 3600e3;
@@ -89,7 +92,18 @@ export function step(C, ev) {
     msgs: [], edits: [], answer: null, weather: null, head: [], tail: [], left: [], notes: [], dnotes: [],
   };
   X.pid = Object.keys(tg.chats).find((k) => tg.chats[k].id === ev.chat) || null;
+  X.as = null;
+  // режим тесту: адмін діє від імені гравця — ev.as (/as) або третя частина callback_data
+  if (testOn(C) && !testBlocked(C, ev.chat) && ev.chat != null) {
+    const tag = ev.t === "cb" ? String(ev.data || "").split("|")[2] : "";
+    const as = ev.as || tag;
+    if (as && C.players[as]) { X.as = as; X.pid = as; }
+  }
   if (ev.t === "cb") X.answer = { id: ev.id, text: "" };
+  if (ev.t === "cb" && testBlocked(C, ev.chat)) { // реальний гравець натиснув стару кнопку під час тесту: нічого не змінюємо
+    X.answer.text = "Бот зараз на тестуванні 🛠";
+    return finish(X);
+  }
   closeIf(X);
   (HANDLERS[ev.t] || (() => {}))(X, ev);
   const g = game(X);
@@ -118,15 +132,15 @@ const S = (X) => X.C.S;
 const say = (X, k, v) => fill(S(X).say[k] || "", v || {});
 const pv = (X, g, pid, extra) => ({ ...gameVars(X.C, g, pid), need: need(X.C), ...(extra || {}) });
 const arrow = (l) => (l.length ? " → запрошено: " + l.join(", ") : "");
-const reply = (X, chat, text) => { if (chat != null && text) X.msgs.push({ chat, text }); };
+const reply = (X, chat, text) => { if (chat != null && text) X.msgs.push({ chat, text, ...(X.as ? { as: X.as } : {}) }); };
 // повідомлення гравцю; false — у гравця немає бота
 function toP(X, pid, text, markup, extra) {
-  const ch = X.tg.chats[pid];
+  const ch = chatFor(X.C, pid);
   if (!ch) return false;
   X.msgs.push({ chat: ch.id, pid, name: nameOf(X.C, pid), text, kb: markup, ...(extra || {}) });
   return true;
 }
-const edit = (X, m, text, markup) => { if (m && m.chat != null && m.msg != null) X.edits.push({ chat: m.chat, msg: m.msg, text, kb: markup || null }); };
+const edit = (X, m, text, markup) => { if (m && m.chat != null && m.msg != null) X.edits.push({ chat: m.chat, msg: m.msg, text, kb: markup || null, ...(X.as ? { pid: X.as } : {}) }); };
 const quiet = (X) => inQuiet(X.C.T.time, S(X).remind.quiet);
 
 function closeIf(X) {
@@ -289,7 +303,7 @@ const HANDLERS = {
   },
   cb(X, ev) {
     const [a, gid] = String(ev.data || "").split("|");
-    if (a === "w") { const wg = X.D.games.find((x) => x.id === gid); X.weather = { chat: ev.chat, date: wg && !played(wg) ? wg.date : null }; return; }
+    if (a === "w") { const wg = X.D.games.find((x) => x.id === gid); X.weather = { chat: ev.chat, date: wg && !played(wg) ? wg.date : null, ...(X.as ? { as: X.as } : {}) }; return; }
     if (!X.pid) { X.answer.text = "Я тебе ще не знаю 🙂 Натисни /start"; return; }
     const g = game(X);
     if (!X.P || !X.P.open || X.P.game !== gid || !g) { X.answer.text = say(X, "closed"); return; }
@@ -336,6 +350,15 @@ const HANDLERS = {
     const invd = fillSlots(X, g);
     X.head.push(`❌ ${nameOf(X.C, pid)} — не зможе (відмітив організатор)` + arrow(invd));
     X.notes.push(nameOf(X.C, pid) + " не зможе");
+  },
+  testreset(X) {
+    if (!testOn(X.C)) { X.head.push("ℹ️ /testreset працює лише в режимі тесту"); return; }
+    const gid = X.P && X.P.game;
+    if (!gid) { X.head.push("ℹ️ Опитування немає — нема що скидати"); return; }
+    delete X.tg.poll; X.P = null;
+    delete X.tg.sent[gid];
+    X.head.push(`🧹 Тест скинуто: опитування й прапорці надсилання гри ${gid}. Склад у data.json не чіпав — чернетку гри видали на сайті сам`);
+    X.notes.push("тест скинуто");
   },
   sync() {}, // усе робить reconcile/fillSlots/announceCheck у step
   nobot(X, ev) {

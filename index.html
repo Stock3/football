@@ -44,6 +44,7 @@ button{cursor:pointer}
 :focus-visible{outline:2px solid var(--blu);outline-offset:2px}
 .num{font-variant-numeric:tabular-nums}
 
+.testbar{background:#B3261E;color:#fff;font-weight:600;text-align:center;padding:8px 12px;border-radius:var(--r)}
 .top{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap}
 .brand{font-family:var(--f-display);font-weight:700;font-size:28px;letter-spacing:.01em;line-height:1;text-transform:uppercase;display:flex;align-items:center;gap:10px}
 .brand .dot{display:inline-flex;width:22px;height:22px;border-radius:50%;background:linear-gradient(90deg,var(--yel) 50%,var(--blu) 50%)}
@@ -309,7 +310,7 @@ var POS = [["gk","Воротар"],["lb","Лівий захисник"],["rb","�
 var MS = [10,25,50,75,100,150,200,250,300,400,500];
 /* Стандартні налаштування оплати й тексти бота. Бот (worker/src/core.js) читає цей блок з index.html, тож він має лишатися валідним JSON між маркерами. */
 var DEF = /*DEF*/{
- "price":81,"card":"","cardName":"","bank":"","payFrom":"","org":"","bot":"","worker":"https://bot.shtuchka.workers.dev",
+ "price":81,"card":"","cardName":"","bank":"","payFrom":"","org":"","bot":"","worker":"https://bot.shtuchka.workers.dev","testMode":false,
  "remind":{"on":true,"mode":"after","after":1,"days":[1,3],"times":["12:00"],"quiet":{"from":"22:00","to":"09:00"},"every":2,"max":3},
  "thanks":[
   "✅ {name}, {sum} грн отримано! {date}, {score} — {verdict}. Дякуємо за гру, до пʼятниці ⚽",
@@ -1196,6 +1197,8 @@ function settingsView(){
   '<div class="panel pad stack"><div><h2 class="h">Telegram-бот</h2><p class="sub">Як створити бота і підключити його — у README</p></div>'+
     '<div class="two"><label class="field">Імʼя бота <span class="hint">без @, напр. friday55_bot</span><input type="text" id="s-bot" value="'+esc(s.bot)+'" autocapitalize="off" autocomplete="off"></label>'+
     '<label class="field">Адреса бота (Worker) <span class="hint">Cloudflare</span><input type="url" id="s-worker" value="'+esc(s.worker)+'" autocapitalize="off" autocomplete="off"></label></div>'+
+    '<label class="chk"><input type="checkbox" id="s-test"'+(s.testMode?" checked":"")+'> Режим тесту</label>'+
+    '<p class="note">Усе, що бот мав надіслати гравцям, приходить лише організатору з позначкою «👤 для Імʼя:»; кнопки в таких повідомленнях діють від імені гравця, а команда /as Імʼя … виконує будь-яку команду від його імені. Реальні гравці не отримують нічого. Організатор має бути підключений до бота. Не забудьте вимкнути після тесту</p>'+
     '<label class="chk"><input type="checkbox" id="s-ron"'+(r.on?" checked":"")+'> Автоматичні нагадування</label>'+
     '<div class="stack sched" id="s-sched" data-mode="'+r.mode+'">'+
     '<div class="rmode"><label class="chk"><input type="radio" name="s-rmode" value="after"'+(r.mode==="after"?" checked":"")+'> Через N днів після гри</label>'+
@@ -1231,6 +1234,7 @@ function readSets(){
   function num(id,def){var x=v(id);return x===null||x===""||isNaN(+x)?def:+x;}
   if(v("s-price")===null)return;
   s.price=num("s-price",s.price); s.payFrom=v("s-from")||""; s.org=v("s-org")||""; s.card=v("s-card").trim(); s.cardName=v("s-cname").trim(); s.bank=v("s-bank").trim();
+  s.testMode=document.getElementById("s-test").checked;
   s.bot=v("s-bot").trim().replace(/^(https?:\/\/)?t\.me\//i,"").replace(/^@/,"");
   s.worker=v("s-worker").trim().replace(/\/+$/,"");
   var mode=document.querySelector('input[name="s-rmode"]:checked'), days=[];
@@ -1355,6 +1359,7 @@ function render(){
   var body=prof?profileView(prof):ui.tab==="matches"?matchesView():ui.tab==="gen"?genView():ui.tab==="pay"?payView():ui.tab==="settings"?settingsView():ui.tab==="players"?(ui.manage?playersView():cardsView()):ratingView(games);
   var pp=prof&&pmap()[prof]; document.title=pp?pp.name+" · Пʼятниця 5×5":"Пʼятниця 5×5";
   app.innerHTML='<div class="wrap">'+
+    (SET().testMode?'<div class="testbar" role="status">Режим тесту увімкнено</div>':'')+
     '<header class="top"><h1 class="brand"><span class="dot" aria-hidden="true"></span>Пʼятниця 5×5</h1>'+(editor?'<button class="btn" data-act="new-game">+ Гра</button>':'')+'</header>'+
     (prof||["gen","players","pay","settings"].indexOf(ui.tab)>=0?"":board(games)+wxBlock())+
     (prof||["gen","players","pay","settings"].indexOf(ui.tab)<0?'<div class="row"><div class="chips" role="group" aria-label="Сезон">'+seasons+'</div></div>':"")+
