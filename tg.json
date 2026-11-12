@@ -82,7 +82,9 @@
   "startedAt": "2026-11-12T09:17:28.016Z",
   "announced": null,
   "short": false,
-  "queueFront": [],
+  "queueFront": [
+   "p3"
+  ],
   "inv": {
    "p1": {
     "at": "2026-11-12T09:17:28.016Z",
