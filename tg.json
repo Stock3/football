@@ -96,7 +96,7 @@
   "game": "g20261113",
   "open": true,
   "startedAt": "2026-11-12T09:44:05.438Z",
-  "announced": null,
+  "announced": "2026-11-12T12:59:14.057Z",
   "short": false,
   "queueFront": [
    "p14"
@@ -161,7 +161,8 @@
    },
    "p12": {
     "at": "2026-11-12T11:05:01.726Z",
-    "ans": null
+    "ans": "yes",
+    "msg": 232
    }
   }
  }
