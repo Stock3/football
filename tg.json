@@ -80,7 +80,7 @@
   "game": "g20261113",
   "open": true,
   "startedAt": "2026-11-12T09:17:28.016Z",
-  "announced": null,
+  "announced": "2026-11-12T09:30:37.725Z",
   "short": false,
   "queueFront": [],
   "inv": {
@@ -118,7 +118,7 @@
    },
    "p9": {
     "at": "2026-11-12T09:30:20.847Z",
-    "ans": null
+    "ans": "yes"
    },
    "p19": {
     "at": "2026-11-12T09:17:28.016Z",
