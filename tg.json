@@ -102,7 +102,7 @@
  ],
  "poll": {
   "game": "g20261113",
-  "open": true,
+  "open": false,
   "startedAt": "2026-11-12T09:44:05.438Z",
   "announced": "2026-11-12T12:59:14.057Z",
   "short": false,
@@ -176,6 +176,7 @@
     "ans": "yes",
     "msg": 302
    }
-  }
+  },
+  "closedAt": "2026-11-13T19:00:20.482Z"
  }
 }
