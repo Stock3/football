@@ -105,7 +105,7 @@
   "open": true,
   "startedAt": "2026-11-12T09:44:05.438Z",
   "announced": "2026-11-12T12:59:14.057Z",
-  "short": true,
+  "short": false,
   "queueFront": [],
   "inv": {
    "p1": {
@@ -173,7 +173,8 @@
    },
    "p20": {
     "at": "2026-11-13T12:11:54.258Z",
-    "ans": null
+    "ans": "yes",
+    "msg": 302
    }
   }
  }
