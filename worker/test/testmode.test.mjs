@@ -317,3 +317,55 @@ test("testMode вимкнено: усе як раніше — реальним �
   await say("/who", chat("p3"));
   assert.equal(w.sent.at(-1).chat_id, chat("p3"));
 });
+
+// ---------- кнопка «💳 Поповнити» ----------
+const BANK = "https://send.monobank.ua/jar/abc";
+const urlBtn = (m) => (m.reply_markup ? m.reply_markup.inline_keyboard.flat().filter((b) => b.url) : []);
+function withBank(testMode) { const d = fixture(testMode); d.settings.bank = BANK; return d; }
+
+test("testMode: /as Імʼя /balance, /topup — повідомлення в чат адміна з позначкою «👤 для Імʼя:», кнопка-посилання лишається", async (t) => {
+  clock(t, SAT_NOON);
+  const w = mockWorld({ data: withBank(true) });
+  await say("/as Борис /balance");
+  let m = w.sent.at(-1);
+  assert.equal(m.chat_id, ADMIN);
+  assert.match(m.text, /^👤 для Борис:\n💰 Баланс: 0 грн$/);
+  assert.deepEqual(m.reply_markup, { inline_keyboard: [[{ text: "💳 Поповнити", url: BANK }]] });
+  await say("/as Дана /topup"); // без бота — теж з кнопкою
+  m = w.sent.at(-1);
+  assert.match(m.text, /^👤 для Дана \(немає бота\):\n💰 Баланс: 0 грн\n/);
+  assert.equal(urlBtn(m)[0].url, BANK);
+  await say("/balance"); // адмін за себе — без позначки
+  m = w.sent.at(-1);
+  assert.ok(!m.text.startsWith("👤")); assert.equal(urlBtn(m).length, 1);
+  assert.ok(w.sent.every((x) => x.chat_id === ADMIN));
+  // банки немає — без кнопки, з підказкою
+  const w2 = mockWorld({ data: fixture(true) });
+  await say("/as Борис /topup");
+  assert.equal(w2.sent.at(-1).text, "👤 для Борис:\n💰 Баланс: 0 грн\nПосилання на банку ще не налаштоване");
+  assert.equal(w2.sent.at(-1).reply_markup, undefined);
+});
+
+test("testMode: підсумок гри (лише в мінусі) і нагадування (завжди) — з кнопкою, у чат адміна; кнопка гравця-в-плюсі відсутня", async (t) => {
+  clock(t, SAT_NOON);
+  const data = withBank(true);
+  data.games = [{ id: GID, date: "2026-11-13", y: ["p2", "p3"], b: ["p4", "p6"], gy: 0, gb: 0, sy: 2, sb: 1 }];
+  data.players[2].top = [{ id: "tt", d: "2026-11-01", a: 500 }]; // Вова в плюсі
+  const tg = { chats: allChats(), poll: { game: GID, open: false, startedAt: "x", closedAt: "y", announced: null, short: false, queueFront: [], inv: {} } };
+  const w = mockWorld({ data, tg });
+  await cron();
+  const pg = w.sent.filter((m) => /Списано/.test(m.text)), rem = w.sent.filter((m) => /баланс у мінусі/.test(m.text));
+  assert.equal(pg.length, 4); assert.equal(rem.length, 3, "Вова в плюсі — без нагадування");
+  assert.ok(pg.every((m) => m.chat_id === ADMIN) && rem.every((m) => m.chat_id === ADMIN));
+  for (const m of [...rem, ...pg.filter((x) => !/для Вова/.test(x.text))]) assert.deepEqual(urlBtn(m).map((b) => b.url), [BANK], m.text);
+  assert.equal(urlBtn(pg.find((x) => /для Вова/.test(x.text))).length, 0, "плюс — без кнопки після гри");
+  assert.ok(w.sent.every((x) => x.chat_id === ADMIN));
+});
+
+test("testMode вимкнено: /balance реальному гравцю — у його чат, з кнопкою", async (t) => {
+  clock(t, SAT_NOON);
+  const w = mockWorld({ data: withBank(false) });
+  await say("/balance", chat("p3"));
+  assert.equal(w.sent.at(-1).chat_id, chat("p3"));
+  assert.deepEqual(urlBtn(w.sent.at(-1)).map((b) => b.url), [BANK]);
+});

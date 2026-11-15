@@ -176,17 +176,17 @@ export const gameIds = (g) => [...new Set([...(g.c || []), ...(g.y || []), ...(g
 export const topIds = (data) => ((data && data.players) || []).flatMap((p) => (Array.isArray(p.top) ? p.top : []).map((t) => t && t.id).filter(Boolean));
 export const balInfo = (C, pid) => BAL.info(C.data, C.S, pid);
 export const money = (n) => BAL.fmt(n);
-// Куди поповнювати: банка Monobank (settings.bank); якщо її не вказано — картка
-export function jarText(C) {
-  const S = C.S;
-  if (S.bank) return S.bank;
-  return S.card ? "картка " + fmtCard(S.card) + (S.cardName ? ` (${S.cardName})` : "") : "";
-}
+// Банка Monobank (settings.bank) — лише коректне http(s)-посилання (Telegram відхиляє повідомлення з некоректною URL-кнопкою)
+export const jarUrl = (C) => (/^https?:\/\/\S+$/.test(String(C.S.bank || "").trim()) ? String(C.S.bank).trim() : "");
+// Інлайн-кнопка «💳 Поповнити» під повідомленням; без банки кнопки немає (undefined). Через deliver() доходить і в режимі тесту
+export const topupKb = (C) => { const u = jarUrl(C); return u ? { inline_keyboard: [[{ text: "💳 Поповнити", url: u }]] } : undefined; };
+const NO_JAR = "Посилання на банку ще не налаштоване";
+// {jar} більше не підставляє посилання (його замінила кнопка): у вже збережених текстах дає порожній рядок.
+// Рядок, що складався лише з {jar}, прибирається разом з переносом, щоб не лишати порожніх рядків.
+const noJar = (t) => String(t).replace(/\n[ \t]*\{jar\}[ \t]*(?=\n|$)/g, "");
 // Остання списана гра: «13.11, 81 грн»
 const lastCharge = (I) => { if (!I.lastGame) return ""; const p = I.lastGame.d.split("-"); return `${p[2]}.${p[1]}, ${money(I.lastGame.a)} грн`; };
-// Баланс у мінусі, а в тексті немає {jar} — посилання дописується в кінці
-const withJar = (C, t, bal) => (bal < 0 && jarText(C) && !String(t).includes("{jar}") ? t + "\n{jar}" : t);
-const balVars = (C, pid, bal) => ({ name: nameOf(C, pid), balance: money(bal), jar: bal < 0 ? jarText(C) : "", site: C.site });
+const balVars = (C, pid, bal) => ({ name: nameOf(C, pid), balance: money(bal), jar: "", site: C.site });
 
 export function gameVars(C, g, pid) {
   const ids = gameIds(g), guests = (+g.gy || 0) + (+g.gb || 0);
@@ -196,7 +196,7 @@ export function gameVars(C, g, pid) {
     list: ids.map((id) => nameOf(C, id)).join(", ") + (guests ? ` + ${guests} ${guests === 1 ? "гість" : guests < 5 ? "гості" : "гостей"}` : ""), site: C.site,
   };
 }
-const toPlayer = (C, pid, text, ops) => ({ chat: chatFor(C, pid).id, pid, name: nameOf(C, pid), text, ops: ops || [] });
+const toPlayer = (C, pid, text, ops, kb) => ({ chat: chatFor(C, pid).id, pid, name: nameOf(C, pid), text, ops: ops || [], ...(kb ? { kb } : {}) });
 
 // ---------- 1. вхідні повідомлення ----------
 // Повертає {msgs, ops}, {weather: {chat}} — прогноз index.js дотягує з Open-Meteo сам,
@@ -206,7 +206,7 @@ export function onMessage(C, m, as) {
   const out = { msgs: [], ops: [] };
   if (!m || typeof m.text !== "string" || !m.chat || m.chat.type !== "private") return out;
   const text = m.text.trim(), chatId = m.chat.id, uname = (m.from && m.from.username) || "";
-  const say = (t) => { out.msgs.push({ chat: chatId, text: t, ...(as ? { as } : {}) }); return out; };
+  const say = (t, kb) => { out.msgs.push({ chat: chatId, text: t, ...(kb ? { kb } : {}), ...(as ? { as } : {}) }); return out; };
   const [cmd, ...rest] = text.split(/\s+/), arg = rest[0];
   const c = (cmd || "").toLowerCase().replace(/@.*$/, "");
   const siteLine = C.site ? "\n" + C.site : "";
@@ -267,24 +267,24 @@ export function onMessage(C, m, as) {
   }
   if (c === "/balance" || /^баланс/i.test(text)) {
     if (!pid) return say(unknown);
-    return say(balanceReply(C, pid));
+    { const r = balanceReply(C, pid); return say(r.text, r.kb); }
   }
   if (c === "/topup" || /^поповн/i.test(text)) {
     if (!pid) return say(unknown);
-    return say(topupReply(C, pid));
+    { const r = topupReply(C, pid); return say(r.text, r.kb); }
   }
   return say("Я вмію: /who — хто йде, /in — хочу грати, /out — не зможу прийти, /balance — мій баланс, /topup — поповнити баланс, /weather — погода на пʼятницю, /stop — не писати мені 🙂");
 }
 
-// /balance: баланс, остання списана гра і, якщо в мінусі, куди поповнити
+// /balance: баланс і остання списана гра; кнопка «💳 Поповнити» — завжди (хоч у плюсі), якщо є банка
 export function balanceReply(C, pid) {
-  const I = balInfo(C, pid), jar = jarText(C), lc = lastCharge(I);
-  return `💰 Баланс: ${money(I.bal)} грн` + (lc ? `\nОстання списана гра: ${lc}` : "") + (I.bal < 0 && jar ? `\nПоповнити: ${jar}` : "");
+  const I = balInfo(C, pid), lc = lastCharge(I), kb = topupKb(C);
+  return { text: `💰 Баланс: ${money(I.bal)} грн` + (lc ? `\nОстання списана гра: ${lc}` : "") + (kb ? "" : "\n" + NO_JAR), kb };
 }
-// /topup: баланс і куди поповнити
+// /topup: баланс і кнопка «💳 Поповнити»
 export function topupReply(C, pid) {
-  const I = balInfo(C, pid), jar = jarText(C);
-  return `💰 Баланс: ${money(I.bal)} грн\n` + (jar ? `Поповнити: ${jar}\nЩойно організатор зарахує поповнення, я напишу 🙂` : "Реквізити для поповнення ще не вказані — запитай в організатора");
+  const I = balInfo(C, pid), kb = topupKb(C);
+  return { text: `💰 Баланс: ${money(I.bal)} грн\n` + (kb ? "Щойно організатор зарахує поповнення, я напишу 🙂" : NO_JAR), kb };
 }
 
 // ---------- погода ----------
@@ -308,15 +308,14 @@ export function thanks(C) {
     const fresh = BAL.tops(p).filter((t) => t.id && +t.a > 0 && dayDiff(t.d, C.T.date) <= THANKS_WINDOW_DAYS && !sentGet(C.tg, t.id, p.id).thx);
     if (!fresh.length || !chatFor(C, p.id)) continue;
     const bal = balInfo(C, p.id).bal, sum = fresh.reduce((s, t) => s + +t.a, 0);
-    const t = withJar(C, pick(C, C.S.thanks), bal);
-    out.msgs.push(toPlayer(C, p.id, fill(t, { ...balVars(C, p.id, bal), amount: money(sum), date: dmon(fresh.at(-1).d) }), fresh.map((x) => ({ op: "thx", gid: x.id, pid: p.id, at }))));
+    out.msgs.push(toPlayer(C, p.id, fill(noJar(pick(C, C.S.thanks)), { ...balVars(C, p.id, bal), amount: money(sum), date: dmon(fresh.at(-1).d) }), fresh.map((x) => ({ op: "thx", gid: x.id, pid: p.id, at }))));
   }
   return out;
 }
 
 // ---------- 2б. підсумок гри зі списанням ----------
 // Один раз кожному гравцю гри (y+b, разом з організатором): результат + «списано {charge} грн за гру {date} · баланс {balance} грн»,
-// а якщо баланс у мінусі — посилання на банку ({jar}). gid — лише ця гра (кнопка сайту), без нього — усі свіжі ігри (cron-страховка).
+// а якщо баланс у мінусі — під повідомленням кнопка «💳 Поповнити». gid — лише ця гра (кнопка сайту), без нього — усі свіжі ігри (cron-страховка).
 export function postGame(C, gid) {
   const out = { msgs: [], ops: [], missing: [] };
   const at = C.now.toISOString();
@@ -332,7 +331,7 @@ export function postGame(C, gid) {
       const list = r === "w" ? C.S.postW : r === "l" ? C.S.postL : C.S.postD;
       const bal = balInfo(C, pid).bal;
       const v = { ...balVars(C, pid, bal), date: dmon(g.date), score: `${my}:${op}`, verdict: pick(C, C.S.verdicts[r]), charge: money(BAL.charge(g, C.S)) };
-      out.msgs.push(toPlayer(C, pid, fill(withJar(C, pick(C, list), bal), v), [{ op: "pg", gid: g.id, pid, at }]));
+      out.msgs.push(toPlayer(C, pid, fill(noJar(pick(C, list)), v), [{ op: "pg", gid: g.id, pid, at }], bal < 0 ? topupKb(C) : undefined));
     }
   }
   return out;
@@ -384,8 +383,7 @@ export function reminders(C, { manual = false, player = "" } = {}) {
       if (last && last !== T.date && dayDiff(last, T.date) < R.every) continue;
     }
     if (!chatFor(C, pid)) { if (manual) out.missing.push(nameOf(C, pid)); continue; }
-    const t = withJar(C, pick(C, C.S.reminders), bal);
-    out.msgs.push(toPlayer(C, pid, fill(t, { ...balVars(C, pid, bal), date: g ? dmon(g.date) : "" }), g ? [{ op: "r", gid: g.id, pid, key }] : []));
+    out.msgs.push(toPlayer(C, pid, fill(noJar(pick(C, C.S.reminders)), { ...balVars(C, pid, bal), date: g ? dmon(g.date) : "" }), g ? [{ op: "r", gid: g.id, pid, key }] : [], topupKb(C)));
   }
   if (slots.length && !testOn(C)) out.ops.push({ op: "slots", keys: slots }); // у тесті слот не «спалюємо»: дедуплікація — по r у грі
   return out;

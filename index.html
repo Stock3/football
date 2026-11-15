@@ -317,9 +317,9 @@ var DEF = /*DEF*/{
   "🙌 {name}, кошти дійшли: зараховано {amount} грн, баланс {balance} грн. До зустрічі на полі!"
  ],
  "reminders":[
-  "👋 {name}, баланс у мінусі ({balance} грн), поповни: {jar}\nЯк зарахують, я сам скажу «дякую» 😉",
-  "⚽ {name}, мʼяч круглий, а баланс у мінусі ({balance} грн) 😅 Поповни: {jar}",
-  "🧾 {name}, на звʼязку бухгалтерія Пʼятниці 5×5: баланс у мінусі ({balance} грн), поповни: {jar} 🙏"
+  "👋 {name}, баланс у мінусі ({balance} грн), поповни, будь ласка\nЯк зарахують, я сам скажу «дякую» 😉",
+  "⚽ {name}, мʼяч круглий, а баланс у мінусі ({balance} грн) 😅 Поповни банку",
+  "🧾 {name}, на звʼязку бухгалтерія Пʼятниці 5×5: баланс у мінусі ({balance} грн), час поповнити 🙏"
  ],
  "time":"21:00","place":"штучне поле Буковини",
  "city":"Чернівці","lat":48.29,"lon":25.94,"rainWarn":90,"sinoptik":"https://sinoptik.ua/pohoda/chernivtsi","meteo":"https://meteo.ua/ua/91/chernovtsyi",
@@ -340,15 +340,15 @@ var DEF = /*DEF*/{
   "d":["нічия на полі, перемога в бухгалтерії","нічия, але гроші не нічия"]
  },
  "postW":[
-  "🏆 {name}, класна гра — перемога {score}!\nСписано {charge} грн за гру {date} · баланс {balance} грн\n{jar}",
-  "💪 Три очки наші, {score}! {name}, списано {charge} грн за гру {date} · баланс {balance} грн\n{jar}"
+  "🏆 {name}, класна гра — перемога {score}!\nСписано {charge} грн за гру {date} · баланс {balance} грн",
+  "💪 Три очки наші, {score}! {name}, списано {charge} грн за гру {date} · баланс {balance} грн"
  ],
  "postL":[
-  "💪 {name}, сьогодні не пощастило, {score}, наступного разу наша!\nСписано {charge} грн за гру {date} · баланс {balance} грн\n{jar}",
-  "😤 {score} — рахунок не наш, але реванш близько. {name}, списано {charge} грн за гру {date} · баланс {balance} грн\n{jar}"
+  "💪 {name}, сьогодні не пощастило, {score}, наступного разу наша!\nСписано {charge} грн за гру {date} · баланс {balance} грн",
+  "😤 {score} — рахунок не наш, але реванш близько. {name}, списано {charge} грн за гру {date} · баланс {balance} грн"
  ],
  "postD":[
-  "🤝 {name}, нічия {score} — нікому не прикро!\nСписано {charge} грн за гру {date} · баланс {balance} грн\n{jar}"
+  "🤝 {name}, нічия {score} — нікому не прикро!\nСписано {charge} грн за гру {date} · баланс {balance} грн"
  ],
  "poll":{"auto":false,"day":4,"time":"11:00","need":10},
  "pollInvite":[
@@ -648,7 +648,7 @@ function normRemind(src){
 /* баланс — спільний з ботом блок BAL (games[].paid більше не враховується) */
 function balOf(id){return BAL.info(S,SET(),id);}
 function fmtCard(c){var d=String(c||"").replace(/\D/g,"");return d.length===16?d.replace(/(\d{4})(?=\d)/g,"$1 "):String(c||"");}
-/* куди поповнювати: банка (settings.bank), інакше картка — так само, як jarText у боті */
+/* куди поповнювати (довідка редактору у вкладці «Баланс»): банка, інакше картка. Бот надсилає лише кнопку на settings.bank */
 function jarText(s){return s.bank?s.bank:s.card?"картка "+fmtCard(s.card)+(s.cardName?" ("+s.cardName+")":""):"";}
 function dmon(d){var p=d.split("-");return +p[2]+" "+MONG[+p[1]-1];}
 function fillT(t,v){return String(t).replace(/\{(\w+)\}/g,function(m,k){return v[k]!=null?v[k]:m;}).replace(/[ \t]+\n/g,"\n").replace(/ {2,}/g," ").trim();}
@@ -1184,7 +1184,7 @@ function remindNow(pid){
 /* приклад підстановок для прев'ю текстів подяки й нагадування (s — налаштування з форми) */
 function sampleVars(s,kind){
   var rows=balRows(), x=rows[0], p=x?x.p:null, bal=kind==="r"?(x&&x.I.bal<0?x.I.bal:-s.price):(x?x.I.bal+s.price:s.price);
-  return {name:p?p.name:"Гравець",amount:BAL.fmt(s.price),balance:BAL.fmt(bal),jar:bal<0?(jarText(s)||"[банка]"):"",date:dmon(todayStr()),site:location.origin+location.pathname};
+  return {name:p?p.name:"Гравець",amount:BAL.fmt(s.price),balance:BAL.fmt(bal),date:dmon(todayStr()),site:location.origin+location.pathname};
 }
 function splitT(v){return String(v||"").split(/\n\s*---\s*\n/).map(function(x){return x.trim();}).filter(Boolean);}
 var WD=["Пн","Вт","Ср","Чт","Пт","Сб","Нд"];
@@ -1215,7 +1215,7 @@ function settingsView(){
     '<p class="note">За кожну зіграну гру з дати початку обліку з балансу кожного гравця команд списується ціна — і в організатора теж; гості не платять. Ціна запамʼятовується в грі, коли вносите рахунок, тож нова ціна діє лише на наступні ігри. Порожня дата вимикає облік.</p>'+
     '<div class="two"><label class="field">Номер картки<input type="text" inputmode="numeric" id="s-card" value="'+esc(s.card)+'"></label>'+
     '<label class="field">Отримувач<input type="text" id="s-cname" value="'+esc(s.cardName)+'" placeholder="Олексій М."></label></div>'+
-    '<label class="field">Посилання на банку <span class="hint">Monobank; бот дає його як {jar}. Без банки — номер картки</span><input type="url" id="s-bank" value="'+esc(s.bank)+'" placeholder="https://send.monobank.ua/jar/…"></label></div>'+
+    '<label class="field">Посилання на банку <span class="hint">Monobank; бот додає під повідомленнями кнопку «💳 Поповнити». Без посилання кнопки не буде</span><input type="url" id="s-bank" value="'+esc(s.bank)+'" placeholder="https://send.monobank.ua/jar/…"></label></div>'+
   '<div class="panel pad stack"><div><h2 class="h">Гра</h2><p class="sub">Для оголошень «Збір є» / «Збір скасовано». Дата береться з гри. Кнопки — на запланованій грі у вкладці «Матчі»</p></div>'+
     '<div class="two"><label class="field">Час гри<input type="time" id="s-time" value="'+esc(s.time)+'"></label>'+
     '<label class="field">Місце<input type="text" id="s-place" value="'+esc(s.place)+'"></label></div>'+
@@ -1257,11 +1257,11 @@ function settingsView(){
     '<div class="three"><label class="field">День запуску<select id="s-pday">'+WD.map(function(d,i){return '<option value="'+(i+1)+'"'+(+s.poll.day===i+1?" selected":"")+'>'+d+'</option>';}).join("")+'</select></label>'+
     '<label class="field">Час запуску<input type="time" step="900" id="s-ptime" value="'+esc(s.poll.time)+'"></label>'+
     '<label class="field">Скільки треба людей<input type="number" min="2" max="30" id="s-pneed" value="'+esc(s.poll.need)+'"></label></div>'+
-    '<p class="note">Організатор (поле в розділі «Оплата») з підключеним ботом отримує звіт про кожну подію й керує командами /poll, /endpoll, /no Імʼя. Автозапуск і нагадування чекають кінця тихих годин. Підстановки: {name} {day} {date} {time} {place} {count} {need} {list} {site}; після гри: {name} {date} {score} (рахунок з боку гравця) {verdict} {charge} (списано за гру) {balance} (баланс після списання) {jar} (посилання на банку — лише якщо баланс у мінусі; якщо {jar} у тексті немає, бот допише його сам). Кілька варіантів — через рядок <b>---</b></p>'+
+    '<p class="note">Організатор (поле в розділі «Оплата») з підключеним ботом отримує звіт про кожну подію й керує командами /poll, /endpoll, /no Імʼя. Автозапуск і нагадування чекають кінця тихих годин. Підстановки: {name} {day} {date} {time} {place} {count} {need} {list} {site}; після гри: {name} {date} {score} (рахунок з боку гравця) {verdict} {charge} (списано за гру) {balance} (баланс після списання). Кілька варіантів — через рядок <b>---</b></p>'+
     POLLT.map(function(k){return ta("s-"+k[0],k[1],s[k[0]],k[2],4);}).join("")+
     '<details><summary class="note">Короткі фрази бота</summary><div class="stack" style="padding-top:10px">'+
     SAYK.map(function(k){return '<label class="field">'+esc(k[1])+'<input type="text" id="s-say-'+k[0]+'" value="'+esc(s.say[k[0]]||"")+'"></label>';}).join("")+'</div></details></div>'+
-  '<div class="panel pad stack"><div><h2 class="h">Тексти</h2><p class="sub">Кілька варіантів розділяйте рядком <b>---</b>, бот обирає випадковий. Підстановки: {name} {balance} (баланс, грн) {jar} (посилання на банку; якщо баланс у мінусі, а {jar} у тексті немає — бот допише) {site}</p></div>'+
+  '<div class="panel pad stack"><div><h2 class="h">Тексти</h2><p class="sub">Кілька варіантів розділяйте рядком <b>---</b>, бот обирає випадковий. Підстановки: {name} {balance} (баланс, грн) {site}</p></div>'+
     ta("s-thanks","Подяка за поповнення",s.thanks,"{amount} — зараховано, грн; {date} — дата поповнення")+
     ta("s-rem","Нагадування, коли баланс у мінусі",s.reminders,"{date} — остання списана гра")+
     '<label class="field">Привітання при підключенні<textarea id="s-hello" rows="3">'+esc(s.hello)+'</textarea></label>'+
@@ -1456,7 +1456,7 @@ app.addEventListener("click",function(e){
       var pg=sortedGames(S.games.filter(function(x){return !played(x)&&gameIds(x).length;})).pop()||sortedGames(S.games.filter(played)).pop();
       ui.previewG=!arr2.length?"Немає текстів":pg?fillT(arr2[Math.floor(Math.random()*arr2.length)],gameVars(pg,gameIds(pg)[0],so2)):"Немає ігор для прикладу"; render(); break;
     case "s-pv-t": case "s-pv-r": readSets(); var so=ui.sets, sv=sampleVars(so,a==="s-pv-r"?"r":"t"), arr=a==="s-pv-t"?so.thanks:so.reminders, tx=arr[Math.floor(Math.random()*arr.length)];
-      if(tx&&sv.jar&&tx.indexOf("{jar}")<0)tx+="\n{jar}"; ui.preview=arr.length?fillT(tx,sv):"Немає текстів"; render(); break;
+      ui.preview=arr.length?fillT(tx,sv):"Немає текстів"; render(); break;
     case "login": var gr=guessRepo(), cc=cfgGet(); ui.login={owner:cc.owner||gr.owner,repo:cc.repo||gr.repo}; render(); var lt=document.getElementById(ui.login.owner?"l-token":"l-owner"); if(lt)lt.focus(); break;
     case "l-go": doLogin(); break;
     case "logout": cfgSet(null); editor=false; sha=null; ui.manage=false; ui.pedit=null; ui.topup=null; ui.sets=null; render(); toast("Ви вийшли. Токен видалено з цього браузера"); break;

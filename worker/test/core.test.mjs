@@ -67,25 +67,42 @@ test("/start: невідомий гравець і невідомий username",
   assert.match(core.onMessage(C0(), pm("/start p99")).msgs[0].text, /Не знайшов такого гравця/);
   assert.match(core.onMessage(C0(), pm("/start", 1, "nobody")).msgs[0].text, /Щоб я знав, хто ти/);
 });
-test("/balance: баланс, остання списана гра, банка — лише в мінусі; незнайомцю — підказка; /status більше немає", () => {
-  const data = fixture(); data.settings.bank = "https://send.monobank.ua/jar/abc";
+const BANK = "https://send.monobank.ua/jar/abc";
+const BTN = { inline_keyboard: [[{ text: "💳 Поповнити", url: BANK }]] };
+test("/balance: баланс, остання списана гра; кнопка «💳 Поповнити» — завжди, хоч у плюсі; тексту з посиланням немає", () => {
+  const data = fixture(); data.settings.bank = BANK;
   data.players[2].top.push({ id: "t1", d: "2026-11-07", a: 19.5 });
   const C = C0({ data });
-  assert.equal(core.onMessage(C, pm("/balance", 101)).msgs[0].text, "💰 Баланс: -81 грн\nОстання списана гра: 06.11, 81 грн\nПоповнити: https://send.monobank.ua/jar/abc");
-  assert.equal(core.onMessage(C, pm("/balance", 103)).msgs[0].text, "💰 Баланс: 19,5 грн\nОстання списана гра: 06.11, 81 грн");
-  assert.equal(core.onMessage(C, pm("баланс", 103)).msgs[0].text, "💰 Баланс: 19,5 грн\nОстання списана гра: 06.11, 81 грн");
+  const m = (t, chat) => core.onMessage(C, pm(t, chat)).msgs[0];
+  assert.equal(m("/balance", 101).text, "💰 Баланс: -81 грн\nОстання списана гра: 06.11, 81 грн");
+  assert.deepEqual(m("/balance", 101).kb, BTN, "мінус — кнопка");
+  assert.equal(m("/balance", 103).text, "💰 Баланс: 19,5 грн\nОстання списана гра: 06.11, 81 грн");
+  assert.deepEqual(m("/balance", 103).kb, BTN, "плюс — кнопка теж");
+  assert.deepEqual(m("баланс", 103).kb, BTN, "текстовий тригер");
+  assert.ok(!/monobank/.test(m("/balance", 101).text));
+  assert.equal(core.onMessage(C, pm("/balance", 999)).msgs[0].kb, undefined);
   assert.match(core.onMessage(C, pm("/balance", 999)).msgs[0].text, /Я тебе ще не знаю/);
-  assert.match(core.onMessage(C, pm("/status", 101)).msgs[0].text, /^Я вмію: .*\/balance — мій баланс, \/topup — поповнити баланс/);
-  // без банки — картка
-  assert.match(core.onMessage(C0(), pm("/balance", 101)).msgs[0].text, /\nПоповнити: картка 1234 5678 1234 5678$/);
+  assert.match(m("/status", 101).text, /^Я вмію: .*\/balance — мій баланс, \/topup — поповнити баланс/);
+  assert.equal(m("/status", 101).kb, undefined);
   // ще не грав і не поповнював
-  assert.equal(core.onMessage(C0({ tg: { chats: { ...chats, p5: { id: 105 } } } }), pm("/balance", 105)).msgs[0].text, "💰 Баланс: 0 грн");
+  assert.equal(core.onMessage(C0({ data, tg: { chats: { ...chats, p5: { id: 105 } } } }), pm("/balance", 105)).msgs[0].text, "💰 Баланс: 0 грн");
 });
-test("/topup: баланс і посилання на банку; без реквізитів — підказка", () => {
-  const data = fixture(); data.settings.bank = "https://send.monobank.ua/jar/abc";
-  assert.equal(core.onMessage(C0({ data }), pm("/topup", 103)).msgs[0].text, "💰 Баланс: 0 грн\nПоповнити: https://send.monobank.ua/jar/abc\nЩойно організатор зарахує поповнення, я напишу 🙂");
-  const d2 = fixture(); delete d2.settings.card;
-  assert.match(core.onMessage(C0({ data: d2 }), pm("/topup", 101)).msgs[0].text, /^💰 Баланс: -81 грн\nРеквізити для поповнення ще не вказані/);
+test("/balance, /topup без банки (порожньо чи не https-посилання): без кнопки, «Посилання на банку ще не налаштоване»", () => {
+  for (const bank of [undefined, "", "   ", "monobank.ua/jar/abc"]) {
+    const data = fixture(); if (bank !== undefined) data.settings.bank = bank; // у fixture є card — картка кнопкою не стає
+    const b = core.onMessage(C0({ data }), pm("/balance", 101)).msgs[0], t = core.onMessage(C0({ data }), pm("/topup", 101)).msgs[0];
+    assert.equal(b.text, "💰 Баланс: -81 грн\nОстання списана гра: 06.11, 81 грн\nПосилання на банку ще не налаштоване");
+    assert.equal(t.text, "💰 Баланс: -81 грн\nПосилання на банку ще не налаштоване");
+    assert.ok(!("kb" in b) && !("kb" in t));
+  }
+});
+test("/topup: баланс і кнопка «💳 Поповнити» (завжди); незнайомцю — підказка", () => {
+  const data = fixture(); data.settings.bank = BANK;
+  const r = core.onMessage(C0({ data }), pm("/topup", 103)).msgs[0];
+  assert.equal(r.text, "💰 Баланс: 0 грн\nЩойно організатор зарахує поповнення, я напишу 🙂");
+  assert.deepEqual(r.kb, BTN);
+  assert.deepEqual(core.onMessage(C0({ data }), pm("/topup", 101)).msgs[0].kb, BTN);
+  assert.deepEqual(core.onMessage(C0({ data }), pm("поповнити", 101)).msgs[0].kb, BTN);
   assert.match(core.onMessage(C0(), pm("/topup", 999)).msgs[0].text, /Я тебе ще не знаю/);
 });
 test("/stop відключає; невідома команда — підказка з /weather", () => {
@@ -115,7 +132,8 @@ test("подяка за поповнення — один раз; кілька �
   assert.equal(r.msgs[0].text, "✅ Аня, зараховано 100 грн, баланс 19 грн. Дякуємо, до пʼятниці ⚽");
   assert.deepEqual(r.msgs[0].ops.map((o) => [o.op, o.gid, o.pid]), [["thx", "t1", "p1"], ["thx", "t2", "p1"]]);
   // Борис і після поповнення в мінусі (−81 − 20 + 10 + 30): до подяки дописано, куди поповнити
-  assert.equal(r.msgs[1].text, "✅ Борис, зараховано 30 грн, баланс -61 грн. Дякуємо, до пʼятниці ⚽\nкартка 1234 5678 1234 5678");
+  assert.equal(r.msgs[1].text, "✅ Борис, зараховано 30 грн, баланс -61 грн. Дякуємо, до пʼятниці ⚽");
+  assert.equal(r.msgs[1].kb, undefined, "подяка без кнопки");
   assert.deepEqual(r.msgs[1].ops.map((o) => o.gid), ["t5"]);
   const tg = core.applyOps(C.tg, r.msgs.flatMap((m) => m.ops), data, C.T.date);
   assert.ok(tg.sent.t1.p1.thx && tg.sent.t5.p2.thx, "прапорці поповнень не прибираються як «зниклі ігри»");
@@ -157,7 +175,11 @@ test("нагадування за розкладом: не двічі за сл�
   let C = C0();
   let r = core.reminders(C);
   assert.deepEqual(r.msgs.map((m) => m.pid).sort(), ["p1", "p2"]); // p3 з балансом 0, p4 без бота
-  assert.equal(r.msgs[0].text, "👋 Аня, баланс у мінусі (-81 грн), поповни: картка 1234 5678 1234 5678\nЯк зарахують, я сам скажу «дякую» 😉");
+  assert.equal(r.msgs[0].text, "👋 Аня, баланс у мінусі (-81 грн), поповни, будь ласка\nЯк зарахують, я сам скажу «дякую» 😉");
+  assert.equal(r.msgs[0].kb, undefined, "банки немає — кнопки немає");
+  const dB = fixture(); dB.settings.bank = BANK;
+  assert.deepEqual(core.reminders(C0({ data: dB })).msgs.map((m) => m.kb), [BTN, BTN], "кнопка — кожному нагадуванню");
+  assert.deepEqual(core.reminders(C0({ data: dB }), { manual: true }).msgs.map((m) => m.kb), [BTN, BTN], "і ручному");
   assert.deepEqual(r.msgs[0].ops, [{ op: "r", gid: "g1", pid: "p1", key: "2026-11-11 12:00" }]);
   assert.deepEqual(r.ops, [{ op: "slots", keys: ["2026-11-11 12:00"] }]);
   let tg = core.applyOps(C.tg, [...r.ops, ...r.msgs.flatMap((m) => m.ops)], C.data, C.T.date);

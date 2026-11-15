@@ -346,22 +346,34 @@ function pgFixture(sy, sb) {
   return data;
 }
 const ctxNow = (data, tg, now = NOW) => core.context({ data, DEF, tg: tg || { chats: allChats() }, now, site: "", rand: () => 0 });
-test("підсумок гри: результат + списано й баланс кожному гравцю, організатору теж; банка — лише в мінусі; paid не враховується", () => {
-  const r = core.postGame(ctxNow(pgFixture(10, 8)), "g7");
-  assert.deepEqual(r.msgs.map((m) => m.pid), ["p1", "p2", "p3", "p4", "p6"]); // p1 — організатор; p3 зі старим paid теж
-  assert.equal(r.msgs[0].text, "🏆 Аня, класна гра — перемога 10:8!\nСписано 81 грн за гру 6 листопада · баланс -81 грн\nкартка 1234 5678 1234 5678");
-  assert.equal(r.msgs[2].text, "🏆 Вова, класна гра — перемога 10:8!\nСписано 81 грн за гру 6 листопада · баланс 119 грн");
-  assert.match(r.msgs.find((m) => m.pid === "p4").text, /^💪 Гліб, сьогодні не пощастило, 8:10, наступного разу наша!\nСписано 81 грн за гру 6 листопада · баланс -81 грн\nкартка 1234/);
-  assert.match(core.postGame(ctxNow(pgFixture(4, 4)), "g7").msgs[0].text, /^🤝 Аня, нічия 4:4 — нікому не прикро!\nСписано 81 грн/);
-  assert.deepEqual(r.msgs[0].ops, [{ op: "pg", gid: "g7", pid: "p1", at: NOW.toISOString() }]);
-});
-test("підсумок гри: ціна зі знімка гри (pr), банка з налаштувань; свій текст без {jar} — посилання дописується, лише якщо в мінусі", () => {
-  const data = pgFixture(10, 8);
-  data.games[0].pr = 100; data.settings.price = 120; data.settings.bank = "https://send.monobank.ua/jar/xyz";
-  data.settings.postW = ["{name}: {score}, мінус {charge}, баланс {balance}"];
+const BANK = "https://send.monobank.ua/jar/xyz";
+const BTN = { inline_keyboard: [[{ text: "💳 Поповнити", url: BANK }]] };
+test("підсумок гри: результат + списано й баланс; кнопка «💳 Поповнити» лише коли баланс < 0 (організатору теж); текст без посилання; paid не враховується", () => {
+  const data = pgFixture(10, 8); data.settings.bank = BANK;
   const r = core.postGame(ctxNow(data), "g7");
-  assert.equal(r.msgs[0].text, "Аня: 10:8, мінус 100, баланс -100\nhttps://send.monobank.ua/jar/xyz");
+  assert.deepEqual(r.msgs.map((m) => m.pid), ["p1", "p2", "p3", "p4", "p6"]); // p1 — організатор; p3 зі старим paid теж
+  assert.equal(r.msgs[0].text, "🏆 Аня, класна гра — перемога 10:8!\nСписано 81 грн за гру 6 листопада · баланс -81 грн");
+  assert.equal(r.msgs[2].text, "🏆 Вова, класна гра — перемога 10:8!\nСписано 81 грн за гру 6 листопада · баланс 119 грн");
+  assert.match(r.msgs.find((m) => m.pid === "p4").text, /^💪 Гліб, сьогодні не пощастило, 8:10, наступного разу наша!\nСписано 81 грн за гру 6 листопада · баланс -81 грн$/);
+  assert.match(core.postGame(ctxNow(pgFixture(4, 4)), "g7").msgs[0].text, /^🤝 Аня, нічия 4:4 — нікому не прикро!\nСписано 81 грн/);
+  assert.deepEqual(r.msgs.map((m) => m.kb), [BTN, BTN, undefined, BTN, BTN], "кнопка — у мінусі (Вова з балансом 119 — без неї)");
+  assert.ok(r.msgs.every((m) => !m.text.includes("monobank")));
+  assert.deepEqual(r.msgs[0].ops, [{ op: "pg", gid: "g7", pid: "p1", at: NOW.toISOString() }]);
+  // банки немає — кнопки немає ніде
+  assert.ok(core.postGame(ctxNow(pgFixture(10, 8)), "g7").msgs.every((m) => !("kb" in m)));
+});
+test("підсумок гри: ціна зі знімка гри (pr); {jar} у збереженому тексті дає порожнє місце без порожніх рядків", () => {
+  const data = pgFixture(10, 8);
+  data.games[0].pr = 100; data.settings.price = 120; data.settings.bank = BANK;
+  data.settings.postW = ["{name}: {score}, мінус {charge}, баланс {balance}"];
+  let r = core.postGame(ctxNow(data), "g7");
+  assert.equal(r.msgs[0].text, "Аня: 10:8, мінус 100, баланс -100");
   assert.equal(r.msgs[2].text, "Вова: 10:8, мінус 100, баланс 100");
+  data.settings.postW = ["{name}: {score}\nбаланс {balance}\n{jar}\nдо зустрічі", "x"];
+  r = core.postGame(ctxNow(data), "g7");
+  assert.equal(r.msgs[0].text, "Аня: 10:8\nбаланс -100\nдо зустрічі");
+  data.settings.postW = ["{name}, баланс {balance} {jar}\n{jar}"];
+  assert.equal(core.postGame(ctxNow(data), "g7").msgs[0].text, "Аня, баланс -100");
 });
 test("старі тексти з {card}/{sum}/{debt} у data.json замінюються стандартними", () => {
   const data = pgFixture(10, 8);
@@ -391,7 +403,10 @@ test("старий paid (і на запланованій грі) нічого �
   assert.equal(core.thanks(C).msgs.length, 0);
   const rm = core.reminders(C, { manual: true });
   assert.deepEqual(rm.msgs.map((m) => m.pid).sort(), ["p1", "p2", "p3", "p4"]); // p1 — організатор
-  assert.match(rm.msgs.find((m) => m.pid === "p1").text, /^👋 Аня, баланс у мінусі \(-81 грн\), поповни: картка 1234 5678 1234 5678/);
+  assert.match(rm.msgs.find((m) => m.pid === "p1").text, /^👋 Аня, баланс у мінусі \(-81 грн\), поповни, будь ласка/);
+  assert.equal(rm.msgs.find((m) => m.pid === "p1").kb, undefined, "банки немає — без кнопки");
+  data.settings.bank = BANK;
+  assert.ok(core.reminders(ctxNow(data), { manual: true }).msgs.every((m) => m.kb && m.kb.inline_keyboard[0][0].url === BANK));
 });
 
 // ---------- погода ----------
