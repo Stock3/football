@@ -6,7 +6,7 @@
 //   наступне повідомлення адміна — текст → bc {step:"preview", text, ids, id} + перегляд «Отримають N: імена» [Надіслати][Скасувати] →
 //   «Надіслати»: msgs усім з ids, bc прибрано. Повідомлення йдуть через deliver() (режим тесту — адміну з «👤 для Імʼя:»), тихі години не діють.
 //   callback_data — «adm:…» / «bc:…» (без «|»: у режимі тесту третя частина через «|» — id гравця).
-import { fill, nameOf, gameIds, chatFor, testOn, adminKb } from "./core.js";
+import { fill, nameOf, gameIds, chatFor, testOn, adminKb, mainKb } from "./core.js";
 
 const kbOf = (rows) => ({ inline_keyboard: rows.map((r) => r.map(([text, data]) => ({ text, callback_data: data }))) });
 export const AUD = { all: "Усім підключеним", game: "Учасникам гри" };
@@ -70,7 +70,8 @@ export function cb(X, ev, H) {
     if (!bc || bc.step !== "preview") return ans("Уже неактуально");
     if (bc.id !== c) return ans("Це застарілий перегляд — дивись останній");
     const ids = bc.ids.filter((pid) => chatFor(C, pid)); // хто встиг відключитись — вже без повідомлення
-    for (const pid of ids) H.toP(X, pid, bc.text, undefined, { bc: true });
+    // постійна клавіатура внизу — як у /start: ті, хто підключився до її появи, отримають її з розсилкою
+    for (const pid of ids) H.toP(X, pid, bc.text, mainKb(pid === C.S.org), { bc: true });
     delete X.tg.bc; note();
     return edit(`📤 Розсилку надіслано: ${ids.length}\n${names(C, ids)}`);
   }

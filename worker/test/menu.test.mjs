@@ -273,6 +273,40 @@ test("розсилка «Усім підключеним»: Кому? → тек
   assert.equal(w.sent.length, before + 12);
 });
 
+test("розсилка несе клавіатуру внизу: гравцю — гравця, організатору — з «⚙️ Адмін»", async (t) => {
+  clock(t, LATE);
+  const w = mockWorld();
+  await press("adm:bc", ADMIN, 21); await press("bc:all", ADMIN, 21);
+  await say("Текст розсилки");
+  const before = w.sent.length;
+  await press(pvId(w), ADMIN, 22);
+  const got = w.sent.slice(before).filter((m) => m.text === "Текст розсилки");
+  const flat = (m) => m.reply_markup.keyboard.flat().map((b) => b.text);
+  const player = got.find((m) => m.chat_id === chat("p2"));
+  assert.deepEqual(player.reply_markup, core.mainKb(false));
+  assert.ok(!flat(player).includes("⚙️ Адмін"));
+  const org = got.find((m) => m.chat_id === ADMIN);
+  assert.deepEqual(org.reply_markup, core.mainKb(true));
+  assert.ok(flat(org).includes("⚙️ Адмін"));
+  assert.ok(got.every((m) => m.reply_markup && m.reply_markup.is_persistent));
+});
+
+test("розсилка в режимі тесту: усе в чат адміна, і клавіатура — адмінська", async (t) => {
+  clock(t, LATE);
+  const w = mockWorld({ data: fixture({ testMode: true }) });
+  await press("adm:bc", ADMIN, 21); await press("bc:all", ADMIN, 21);
+  await say("Тестова розсилка");
+  const before = w.sent.length;
+  await press(pvId(w), ADMIN, 22);
+  const got = w.sent.slice(before).filter((m) => m.text.includes("Тестова розсилка"));
+  assert.ok(got.length > 1);
+  for (const m of got) {
+    assert.equal(m.chat_id, ADMIN);
+    assert.deepEqual(m.reply_markup, core.mainKb(true));
+  }
+  assert.ok(got.some((m) => m.text.startsWith("👤 для ")));
+});
+
 test("розсилка «Учасникам гри»: c/y/b поточної гри; без бота — у перегляді, не отримують; порожня гра — не починається", async (t) => {
   clock(t, THU);
   const data = fixture({ games: [{ id: GID, date: "2026-11-13", c: ["p3"], y: ["p2", "p5"], b: ["p4"], gy: 1, gb: 0 }] });

@@ -97,7 +97,8 @@ function route(C, m) {
   if (A == null) return null;
   const pid = m.pid || m.as;
   if (m.admin || !pid || pid === C.S.org) return { chat: A, text: m.text, kb: m.kb }; // уже адміну: без змін
-  return { chat: A, text: forLabel(C, pid) + m.text, kb: tagKb(m.kb, pid) };
+  // розсилка в тесті: усе йде адміну, тож і клавіатура внизу — адмінська
+  return { chat: A, text: forLabel(C, pid) + m.text, kb: m.bc ? core.mainKb(true) : tagKb(m.kb, pid) };
 }
 async function deliver(env, C, m) {
   const d = route(C, m);
