@@ -7,6 +7,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import * as core from "../src/core.js";
 import worker from "../src/index.js";
+import { initGit } from "./gh-mock.mjs";
 
 const dir = path.dirname(fileURLToPath(import.meta.url));
 const HTML = fs.readFileSync(path.join(dir, "..", "..", "index.html"), "utf8");
@@ -150,9 +151,10 @@ test("worker/src/wx.js збігається з блоком /*WX*/ в index.html
 const SECRET = "s3cr3t-webhook", TGT = "123456:TG-TOKEN-XYZ", GHT = "github_pat_WORKER_TOKEN";
 const env = { TG_TOKEN: TGT, GH_TOKEN: GHT, TG_SECRET: SECRET, GH_REPO: "Stock3/football", GH_BRANCH: "main", SITE_ORIGIN: "https://stock3.github.io" };
 function mockWorld({ data = fixture(), tg = { chats }, conflicts = 0, onConflict } = {}) {
-  // sha — версія tg.json, dsha — data.json; conflicts — скільки наступних записів відповісти 409
-  const w = { files: { "data.json": JSON.stringify(data), "index.html": HTML, "tg.json": JSON.stringify(tg) }, sha: 1, dsha: 1, sent: [], puts: [], tgCalls: [], conflicts, logs: [], om: 0, mid: 500 };
-  const enc = (s) => Buffer.from(s, "utf8").toString("base64").replace(/(.{60})/g, "$1\n");
+  // GitHub — test/gh-mock.mjs: w.commits — коміти бота, w.attempts — спроби оновити гілку; conflicts — скільки наступних відхилити
+  const w = { files: { "data.json": JSON.stringify(data), "index.html": HTML, "tg.json": JSON.stringify(tg) }, sent: [], tgCalls: [], conflicts, logs: [], om: 0, mid: 500 };
+  w.onConflict = onConflict;
+  const gh = initGit(w, { onConflict: (w2) => w2.onConflict && w2.onConflict(w2) });
   globalThis.fetch = async (url, opt = {}) => {
     url = String(url); const body = opt.body ? JSON.parse(opt.body) : null; const hdr = opt.headers || {};
     const res = (status, obj) => new Response(JSON.stringify(obj), { status, headers: { "content-type": "application/json" } });
@@ -167,21 +169,11 @@ function mockWorld({ data = fixture(), tg = { chats }, conflicts = 0, onConflict
       return res(200, { ok: true, result: true });
     }
     if (url.startsWith("https://api.open-meteo.com/")) { w.om++; return res(500, {}); }
-    const cm = url.match(/^https:\/\/api\.github\.com\/repos\/Stock3\/football\/contents\/([^?]+)/);
-    if (cm) {
+    if (url.startsWith("https://api.github.com/repos/Stock3/football/")) {
       assert.equal(hdr.Authorization, "Bearer " + GHT);
       assert.ok(hdr["User-Agent"]);
-      const f = cm[1];
-      const cur = () => (f === "tg.json" ? "sha" + w.sha : f === "data.json" ? "d" + w.dsha : "x");
-      const bump = () => { if (f === "tg.json") w.sha++; else if (f === "data.json") w.dsha++; };
-      if (!opt.method || opt.method === "GET") return f in w.files ? res(200, { content: enc(w.files[f]), sha: cur() }) : res(404, {});
-      w.puts.push({ f, body });
-      if (body.sha !== cur() || w.conflicts > 0) {
-        if (w.conflicts > 0) { w.conflicts--; if (onConflict) onConflict(w, f); bump(); }
-        return res(409, { message: "conflict" });
-      }
-      w.files[f] = Buffer.from(body.content, "base64").toString("utf8"); bump();
-      return res(200, { content: { sha: cur() } });
+      const r = gh(url, opt, body, res);
+      if (r) return r;
     }
     if (url === "https://api.github.com/repos/Stock3/football") {
       const t = hdr.Authorization;
@@ -212,8 +204,7 @@ test("webhook: /start одразу 200, далі підключення й за�
   await c.done();
   assert.match(w.sent[0].text, /Привіт, Дана/);
   assert.equal(tgState(w).chats.p5.id, 505);
-  assert.equal(w.puts[0].body.message, "Бот: підключено Дана");
-  assert.equal(w.puts[0].body.branch, "main");
+  assert.deepEqual(w.commits, [{ message: "Бот: підключено Дана", files: ["tg.json"] }]);
 });
 test("webhook: /status не пише tg.json; /weather при помилці Open-Meteo відповідає", async () => {
   const w = mockWorld(), c = ctxMock();
@@ -221,20 +212,21 @@ test("webhook: /status не пише tg.json; /weather при помилці Ope
   await worker.fetch(req("/tg", { method: "POST", headers: h, body: JSON.stringify({ message: pm("/status", 102) }) }), env, c);
   await worker.fetch(req("/tg", { method: "POST", headers: h, body: JSON.stringify({ message: pm("/weather", 9999) }) }), env, c);
   await quiet(() => c.done());
-  assert.equal(w.puts.length, 0);
+  assert.equal(w.attempts.length, 0);
   assert.match(w.sent.find((m) => m.chat_id === 102).text, /Борис, не оплачено/);
   assert.match(w.sent.find((m) => m.chat_id === 9999).text, /недоступний/);
   assert.equal(w.om, 1);
 });
-test("tg.json: 409 → перечитати, застосувати знову (зберігаються обидві зміни)", async () => {
+test("tg.json: конфлікт (гілку змінено) → перечитати, застосувати знову (зберігаються обидві зміни)", async () => {
   const w = mockWorld({ tg: { chats: {} }, conflicts: 1, onConflict: (w) => { w.files["tg.json"] = JSON.stringify({ chats: { p3: { id: 103 } }, sent: {}, slots: [] }); } }), c = ctxMock();
   const logs = await quiet(async () => {
     await worker.fetch(req("/tg", { method: "POST", headers: { "X-Telegram-Bot-Api-Secret-Token": SECRET }, body: JSON.stringify({ message: pm("/start p1", 101, "anya") }) }), env, c);
     await c.done();
   });
-  assert.equal(w.puts.length, 2);
+  assert.equal(w.attempts.length, 2);
+  assert.equal(w.commits.length, 1);
   assert.deepEqual(Object.keys(tgState(w).chats).sort(), ["p1", "p3"]);
-  assert.ok(logs.some((l) => /конфлікт \(409\)/.test(l)));
+  assert.ok(logs.some((l) => /tg\.json: конфлікт \(гілку змінено\), спроба 2/.test(l)));
 });
 test("tg.json: три конфлікти поспіль — помилка в лог, без зациклення", async () => {
   const w = mockWorld({ tg: { chats: {} }, conflicts: 5 }), c = ctxMock();
@@ -242,8 +234,9 @@ test("tg.json: три конфлікти поспіль — помилка в л
     await worker.fetch(req("/tg", { method: "POST", headers: { "X-Telegram-Bot-Api-Secret-Token": SECRET }, body: JSON.stringify({ message: pm("/start p1", 101, "anya") }) }), env, c);
     await c.done();
   });
-  assert.equal(w.puts.length, 3);
-  assert.ok(logs.some((l) => /webhook: GitHub запис tg\.json: 409/.test(l)), logs.join("\n"));
+  assert.equal(w.attempts.length, 3);
+  assert.equal(w.commits.length, 0);
+  assert.ok(logs.some((l) => /webhook: GitHub запис tg\.json: конфлікт/.test(l)), logs.join("\n"));
 });
 test("/notify: без токена 401, без права запису 403, CORS", async () => {
   mockWorld();
@@ -291,17 +284,16 @@ test("/notify unlink: потрібен токен; привʼязка приби
     assert.equal((await call({ mode: "unlink", player: "p3" }, null)).status, 401);
     assert.equal((await call({ mode: "unlink", player: "p3" }, "reader-token")).status, 403);
     assert.deepEqual(Object.keys(tgState(w).chats), ["p1", "p2", "p3"], "без прав привʼязка лишається");
-    assert.equal(w.puts.length, 0);
+    assert.equal(w.attempts.length, 0);
     assert.equal((await call({ mode: "unlink" })).status, 400);
     let r = await call({ mode: "unlink", player: "p3" });
     assert.deepEqual(r, { status: 200, j: { ok: true, unlinked: true } });
     assert.deepEqual(Object.keys(tgState(w).chats), ["p1", "p2"]);
-    assert.equal(w.puts.length, 1);
-    assert.equal(w.puts[0].body.message, "Бот: відключено Вова");
+    assert.deepEqual(w.commits.map((c) => c.message), ["Бот: відключено Вова"]);
     assert.equal(w.sent.length, 0, "повідомлення гравцю немає");
     r = await call({ mode: "unlink", player: "p3" });
     assert.deepEqual(r.j, { ok: true, unlinked: false });
-    assert.equal(w.puts.length, 1);
+    assert.equal(w.commits.length, 1);
   });
 });
 test("cron: нагадування за розкладом один раз за слот", async () => {
@@ -312,8 +304,7 @@ test("cron: нагадування за розкладом один раз за 
   // нагадування Ані й Борису + подяка-страховка Вові (оплату позначено, подяки ще не було); другий запуск — нічого
   assert.deepEqual(w.sent.map((m) => m.chat_id).sort(), [101, 102, 103]);
   assert.match(w.sent.find((m) => m.chat_id === 103).text, /Вова/);
-  assert.equal(w.puts.length, 1);
-  assert.equal(w.puts[0].body.message, "Бот: подяки; нагадування");
+  assert.deepEqual(w.commits, [{ message: "Бот: подяки; нагадування", files: ["tg.json"] }]);
 });
 test("/setup: ключ, webhook з секретом, команди; /health", async () => {
   const w = mockWorld();
@@ -348,6 +339,8 @@ test("токени ніколи не потрапляють у лог", async ()
 
 // ---------- опитування через index.js ----------
 // p1 — організатор (чат 101); гра ще не створена — /poll створить її в data.json
+// «сьогодні» — четвер 12 листопада 2026, 11:00 у Києві: найближча гра — пʼятниця 13 листопада
+const clock = (t) => t.mock.timers.enable({ apis: ["Date"], now: new Date("2026-11-12T09:00:00Z") });
 function pollWorld(o = {}) {
   const data = fixture();
   data.settings.org = "p1";
@@ -359,13 +352,17 @@ let ctxMockRun;
 async function tgUpdate(body) { ctxMockRun = ctxMock(); const r = await hook(body); await ctxMockRun.done(); return r; }
 const dataState = (w) => JSON.parse(w.files["data.json"]);
 
-test("webhook: /poll → гра в data.json, запрошення з кнопками, стан у tg.json; кнопка «Буду» → c, редагування, answerCallbackQuery", async () => {
+test("webhook: /poll → гра в data.json, запрошення з кнопками, стан у tg.json; кнопка «Буду» → c, редагування, answerCallbackQuery", async (t) => {
+  clock(t);
   const w = pollWorld();
   await quiet(async () => {
     await tgUpdate({ message: pm("/poll", 101) });
     const g = dataState(w).games.find((x) => x.id === "g20261113");
     assert.ok(g, "гру створено");
-    assert.ok(w.puts.some((p) => p.f === "data.json" && /Бот: нова гра 2026-11-13/.test(p.body.message)));
+    // одна подія — один коміт з обома файлами
+    assert.equal(w.commits.length, 1);
+    assert.deepEqual(w.commits[0].files, ["data.json", "tg.json"]);
+    assert.match(w.commits[0].message, /^Бот: нова гра 2026-11-13; /);
     const poll = tgState(w).poll;
     assert.equal(poll.game, "g20261113");
     // 5 активних: p1, p2, p3 мають бота; p4, p5 — без бота (організатору 📵)
@@ -384,26 +381,65 @@ test("webhook: /poll → гра в data.json, запрошення з кнопк
   assert.equal(ed.body.text, "Ти в грі ✅ (1/10)");
   assert.match(w.sent.find((m) => m.chat_id === 101).text, /✅ Борис — буде \(1\/10\)/);
 });
-test("webhook: 409 на data.json → перечитати й перерахувати; гравець не дублюється", async () => {
+test("webhook: конфлікт на оновленні гілки (сайт зберіг data.json) → перечитати й перерахувати; один коміт, гравець не дублюється", async (t) => {
+  clock(t);
   const w = pollWorld();
   await quiet(() => tgUpdate({ message: pm("/poll", 101) }));
-  // поки бот рахував, сайт зберіг data.json (додав Аню вручну)
+  w.commits.length = 0; w.attempts.length = 0; w.tgCalls.length = 0; w.sent.length = 0;
+  // поки бот рахував, сайт зберіг data.json (додав Аню вручну) — гілка пішла вперед, PATCH ref не fast-forward
   w.conflicts = 1;
-  let onc = (w2, f) => { const d = JSON.parse(w2.files["data.json"]); d.games.find((x) => x.id === "g20261113").y = ["p1"]; w2.files["data.json"] = JSON.stringify(d); };
-  globalThis.fetch = ((f) => async (url, opt) => { if (opt && opt.method === "PUT" && w.conflicts > 0) { onc(w, "data.json"); } return f(url, opt); })(globalThis.fetch);
+  w.onConflict = (w2) => { const d = JSON.parse(w2.files["data.json"]); d.games.find((x) => x.id === "g20261113").y = ["p1"]; w2.files["data.json"] = JSON.stringify(d); };
   const logs = await quiet(() => tgUpdate({ callback_query: { id: "cb2", data: "y|g20261113", message: { message_id: 3, chat: { id: 102 } } } }));
   const g = dataState(w).games.find((x) => x.id === "g20261113");
   assert.deepEqual(g.c, ["p2"]); assert.deepEqual(g.y, ["p1"]);
-  assert.ok(logs.some((l) => /опитування: конфлікт \(409\)/.test(l)));
+  assert.equal(tgState(w).poll.inv.p2.ans, "yes");
+  assert.ok(logs.some((l) => /опитування: конфлікт \(гілку змінено\), спроба 2/.test(l)), logs.join("\n"));
+  assert.equal(w.attempts.length, 2);
+  assert.deepEqual(w.commits, [{ message: "Бот: Борис буде", files: ["data.json", "tg.json"] }]);
   assert.equal(w.tgCalls.filter((x) => x.method === "answerCallbackQuery").length, 1);
+  assert.equal(w.sent.filter((m) => m.chat_id === 101 && /Борис — буде/.test(m.text)).length, 1, "звіт — один раз, після коміту");
 });
-test("webhook: запрошення не дійшло (бот заблокований) → 📵 організатору, місце тримається", async () => {
+test("webhook: data.json змінено між читанням і записом (sha блоба в дереві інший) → перерахувати без зайвого PATCH", async (t) => {
+  clock(t);
+  const w = pollWorld();
+  await quiet(() => tgUpdate({ message: pm("/poll", 101) }));
+  w.commits.length = 0; w.attempts.length = 0;
+  // сайт зберігає data.json саме тоді, коли бот уже прочитав файли (на першому GET гілки)
+  const orig = globalThis.fetch; let once = true;
+  globalThis.fetch = async (url, opt = {}) => {
+    if (once && String(url).endsWith("/git/ref/heads/main")) {
+      once = false;
+      const d = JSON.parse(w.files["data.json"]); d.games.find((x) => x.id === "g20261113").b = ["p3"]; w.files["data.json"] = JSON.stringify(d);
+    }
+    return orig(url, opt);
+  };
+  const logs = await quiet(() => tgUpdate({ callback_query: { id: "cb3", data: "y|g20261113", message: { message_id: 3, chat: { id: 102 } } } }));
+  const g = dataState(w).games.find((x) => x.id === "g20261113");
+  assert.deepEqual(g.c, ["p2"]); assert.deepEqual(g.b, ["p3"]);
+  assert.ok(logs.some((l) => /опитування: конфлікт \(data\.json змінено\)/.test(l)), logs.join("\n"));
+  assert.equal(w.attempts.length, 1);
+  assert.equal(w.commits.length, 1);
+});
+test("webhook: крок лише зі станом опитування (tg.json) → один коміт лише з tg.json, примітка опитування", async (t) => {
+  clock(t);
+  const w = pollWorld();
+  await quiet(() => tgUpdate({ message: pm("/poll", 101) }));
+  w.commits.length = 0;
+  const data0 = w.files["data.json"];
+  await quiet(() => tgUpdate({ callback_query: { id: "cb4", data: "l|g20261113", message: { message_id: 3, chat: { id: 102 } } } }));
+  assert.equal(tgState(w).poll.inv.p2.ans, "later");
+  assert.equal(w.files["data.json"], data0, "data.json не змінено");
+  assert.deepEqual(w.commits, [{ message: "Бот: Борис пізніше", files: ["tg.json"] }]);
+});
+test("webhook: запрошення не дійшло (бот заблокований) → 📵 організатору, місце тримається", async (t) => {
+  clock(t);
   const w = pollWorld(); w.blocked = [103];
   await quiet(() => tgUpdate({ message: pm("/poll", 101) }));
   assert.equal(tgState(w).poll.inv.p3.nobot, true);
   assert.ok(w.sent.some((m) => m.chat_id === 101 && /📵 Вова без бота/.test(m.text)));
 });
-test("webhook: /out → причина → вихід зі складу; /who; не організатор — /poll заборонено", async () => {
+test("webhook: /out → причина → вихід зі складу; /who; не організатор — /poll заборонено", async (t) => {
+  clock(t);
   const w = pollWorld();
   await quiet(async () => {
     await tgUpdate({ message: pm("/poll", 101) });
@@ -420,7 +456,8 @@ test("webhook: /out → причина → вихід зі складу; /who; �
   assert.deepEqual(dataState(w).games.find((x) => x.id === "g20261113").c, []);
   assert.ok(w.sent.some((m) => m.chat_id === 101 && /🚫 Борис скасував: температура/.test(m.text)));
 });
-test("/notify sync: рахунок внесено → підсумок гри з оплатою (один раз), опитування закривається", async () => {
+test("/notify sync: рахунок внесено → підсумок гри з оплатою (один раз), опитування закривається", async (t) => {
+  clock(t);
   const data = fixture(); data.settings.org = "p1";
   data.games[0].paid = ["p3"];
   const w = mockWorld({ data, tg: { chats, poll: { game: "g1", open: true, startedAt: "x", announced: null, short: false, queueFront: [], inv: {} } } });

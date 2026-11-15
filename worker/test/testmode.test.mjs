@@ -7,6 +7,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import * as core from "../src/core.js";
 import worker from "../src/index.js";
+import { initGit } from "./gh-mock.mjs";
 
 Math.random = () => 0; // бот обирає випадковий варіант тексту — у тестах завжди перший
 const dir = path.dirname(fileURLToPath(import.meta.url));
@@ -35,8 +36,8 @@ const allChats = () => Object.fromEntries(NAMES.map((n, i) => "p" + (i + 1)).fil
 const SECRET = "s3cr3t", TGT = "123456:TG-TOKEN", GHT = "github_pat_WORKER";
 const env = { TG_TOKEN: TGT, GH_TOKEN: GHT, TG_SECRET: SECRET, GH_REPO: "Stock3/football", GH_BRANCH: "main", SITE_ORIGIN: "https://stock3.github.io" };
 function mockWorld({ data = fixture(), tg = { chats: allChats() } } = {}) {
-  const w = { files: { "data.json": JSON.stringify(data), "index.html": HTML, "tg.json": JSON.stringify(tg) }, sha: 1, dsha: 1, sent: [], tgCalls: [], mid: 500 };
-  const enc = (s) => Buffer.from(s, "utf8").toString("base64");
+  const w = { files: { "data.json": JSON.stringify(data), "index.html": HTML, "tg.json": JSON.stringify(tg) }, sent: [], tgCalls: [], mid: 500 };
+  const gh = initGit(w);
   globalThis.fetch = async (url, opt = {}) => {
     url = String(url); const body = opt.body ? JSON.parse(opt.body) : null;
     const res = (status, obj) => new Response(JSON.stringify(obj), { status, headers: { "content-type": "application/json" } });
@@ -46,16 +47,8 @@ function mockWorld({ data = fixture(), tg = { chats: allChats() } } = {}) {
       return res(200, { ok: true, result: true });
     }
     if (url.startsWith("https://api.open-meteo.com/")) return res(500, {});
-    const cm = url.match(/^https:\/\/api\.github\.com\/repos\/Stock3\/football\/contents\/([^?]+)/);
-    if (cm) {
-      const f = cm[1];
-      const cur = () => (f === "tg.json" ? "sha" + w.sha : f === "data.json" ? "d" + w.dsha : "x");
-      if (!opt.method || opt.method === "GET") return f in w.files ? res(200, { content: enc(w.files[f]), sha: cur() }) : res(404, {});
-      if (body.sha !== cur()) return res(409, { message: "conflict" });
-      w.files[f] = Buffer.from(body.content, "base64").toString("utf8");
-      if (f === "tg.json") w.sha++; else if (f === "data.json") w.dsha++;
-      return res(200, { content: { sha: cur() } });
-    }
+    const r = gh(url, opt, body, res);
+    if (r) return r;
     if (url === "https://api.github.com/repos/Stock3/football") return res(200, { permissions: { push: true } });
     throw new Error("Неочікуваний запит " + url);
   };
@@ -63,7 +56,7 @@ function mockWorld({ data = fixture(), tg = { chats: allChats() } } = {}) {
 }
 const tgState = (w) => JSON.parse(w.files["tg.json"]);
 const dataState = (w) => JSON.parse(w.files["data.json"]);
-const setData = (w, f) => { const d = dataState(w); f(d); w.files["data.json"] = JSON.stringify(d); w.dsha++; };
+const setData = (w, f) => { const d = dataState(w); f(d); w.files["data.json"] = JSON.stringify(d); };
 const game = (w) => dataState(w).games.find((g) => g.id === GID);
 const quiet = async (fn) => { const orig = console.log; console.log = () => {}; try { return await fn(); } finally { console.log = orig; } };
 const clock = (t, d) => t.mock.timers.enable({ apis: ["Date"], now: d });

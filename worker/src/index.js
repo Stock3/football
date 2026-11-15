@@ -1,6 +1,6 @@
 // Telegram-бот «Пʼятниця 5×5» на Cloudflare Workers: webhook (миттєві відповіді) + cron кожні 15 хв.
 // Власного сховища немає: data.json, index.html (блок DEF) і tg.json читаються й пишуться в репозиторії
-// через GitHub Contents API. Логіка — у core.js і poll.js (опитування); тут лише мережа.
+// через GitHub API: читання — Contents API, запис — Git Data API, усі змінені файли одним комітом (ghCommit). Логіка — у core.js і poll.js (опитування); тут лише мережа.
 //
 // Ендпоінти:
 //   POST /tg      — webhook Telegram (перевірка X-Telegram-Bot-Api-Secret-Token)
@@ -112,24 +112,25 @@ function routeEdit(C, e) {
 }
 
 // ---------- опитування ----------
-// Крок опитування як транзакція: прочитати data.json і tg.json → poll.step → записати data.json, потім tg.json.
-// Конфлікт запису (409/422) — перечитати й порахувати заново (до 3 спроб). Повідомлення — лише після запису.
-// Запрошення, що не дійшли (бот заблокований), — окремим кроком {t:"nobot"}: гравець тримає місце, організатору — 📵.
+// Крок опитування як транзакція: прочитати data.json і tg.json → poll.step → записати обидва файли ОДНИМ комітом (ghCommit).
+// Конфлікт (гілку змінив хтось інший після читання) — перечитати й порахувати заново (до 4 спроб; обробники ідемпотентні).
+// Повідомлення — лише після коміту. Запрошення, що не дійшли (бот заблокований), — окремим кроком {t:"nobot"}:
+// гравець тримає місце, організатору — 📵.
 async function pollRun(env, ev) {
-  let st, C, r, stage;
+  let st, C, r;
   for (let attempt = 1; ; attempt++) {
     st = await load(env); C = ctx(env, st); r = poll.step(C, ev);
+    if (!r.data && !r.tg) break;
+    const files = {};
+    if (r.data) files["data.json"] = r.data;
+    if (r.tg) files["tg.json"] = r.tg;
     try {
-      if (r.data) { stage = "data"; await ghWrite(env, "data.json", r.data, st.dsha, "Бот: " + r.dnote); }
-      if (r.tg) { stage = "tg"; await ghWrite(env, "tg.json", r.tg, st.sha, "Бот: " + r.note); }
+      // крок порахований з обох файлів — тож на голові гілки обидва мають бути такими, як ми їх прочитали
+      await ghCommit(env, files, { "data.json": st.dsha, "tg.json": st.sha }, pollMessage(r));
       break;
     } catch (e) {
-      if (e.conflict && attempt < 4) { console.log(`опитування: конфлікт (${e.status}), спроба ${attempt + 1}`); continue; }
-      // Критичне — лише запис складу (data.json). Якщо він уже на місці, а не вдався tg.json, відповідь гравця збережено:
-      // решту кроків (відповідь, редагування, звіт) виконуємо, стан опитування вирівняє наступна подія (reconcile).
-      if (stage === "data" || !r.tg) throw e;
-      console.log("опитування: tg.json не записано:", e.message);
-      break;
+      if (e.conflict && attempt < 4) { console.log(`опитування: конфлікт (${e.reason}), спроба ${attempt + 1}`); continue; }
+      throw e;
     }
   }
   // Усе нижче — не критичне: збій одного кроку логуємо й не зупиняємо решту.
@@ -272,41 +273,68 @@ async function run(env, st, C, r) {
   return { sent, failed };
 }
 
-// Записати tg.json лише якщо стан змінився. Конфлікт (409/422 — файл змінився між читанням і записом):
-// перечитати, застосувати ті самі операції до свіжого стану, до 3 спроб.
+// Записати tg.json лише якщо стан змінився (тим самим ghCommit). Конфлікт (tg.json змінився між читанням і записом
+// або гілку змінено під час запису): перечитати, застосувати ті самі операції до свіжого стану, до 3 спроб.
 async function saveTg(env, st, ops, today) {
   let tg = st.tg, sha = st.sha;
   for (let attempt = 1; attempt <= 3; attempt++) {
     const next = core.applyOps(tg, ops, st.data, today);
     if (core.sameState(next, tg) && !("offset" in (tg || {}))) return false;
-    const body = { message: "Бот: " + core.describeOps(ops, st.data), content: b64(JSON.stringify(next, null, 1) + "\n"), branch: env.GH_BRANCH || "main" };
-    if (sha) body.sha = sha;
-    const r = await fetch(`${ghApi(env)}/repos/${env.GH_REPO}/contents/tg.json`, { method: "PUT", headers: ghHeaders(env), body: JSON.stringify(body) });
-    if (r.ok) return true;
-    if ((r.status === 409 || r.status === 422) && attempt < 3) {
-      console.log(`tg.json: конфлікт (${r.status}), спроба ${attempt + 1}`);
+    try { return await ghCommit(env, { "tg.json": next }, { "tg.json": sha }, "Бот: " + core.describeOps(ops, st.data)); }
+    catch (e) {
+      if (!e.conflict || attempt >= 3) throw e;
+      console.log(`tg.json: конфлікт (${e.reason}), спроба ${attempt + 1}`);
       const f = await ghRead(env, "tg.json");
       tg = f ? JSON.parse(f.text) : {}; sha = f ? f.sha : null;
-      continue;
     }
-    throw new Error(`GitHub запис tg.json: ${r.status}`);
   }
 }
 
-// Записати файл цілком (крок опитування). Конфлікт — помилка з conflict: true, решту вирішує pollRun.
-async function ghWrite(env, file, obj, sha, message) {
-  const body = { message, content: b64(JSON.stringify(obj, null, 1) + "\n"), branch: env.GH_BRANCH || "main" };
-  if (sha) body.sha = sha;
-  const r = await fetch(`${ghApi(env)}/repos/${env.GH_REPO}/contents/${file}`, { method: "PUT", headers: ghHeaders(env), body: JSON.stringify(body) });
-  if (r.ok) return;
-  const e = new Error(`GitHub запис ${file}: ${r.status}`);
-  e.status = r.status; e.conflict = r.status === 409 || r.status === 422;
-  throw e;
+// Повідомлення коміту кроку опитування: примітка про склад, якщо змінився data.json, інакше — про опитування;
+// якщо змінилися обидва й примітки різні — через «; ».
+function pollMessage(r) {
+  const notes = [];
+  if (r.data) notes.push(r.dnote);
+  if (r.tg && (!r.data || r.note !== r.dnote)) notes.push(r.note);
+  return "Бот: " + notes.filter(Boolean).join("; ");
 }
 
 // ---------- GitHub ----------
 const ghApi = (env) => env.GH_API || "https://api.github.com";
 const ghHeaders = (env) => ({ Authorization: "Bearer " + env.GH_TOKEN, Accept: "application/vnd.github+json", "X-GitHub-Api-Version": "2022-11-28", "User-Agent": UA, "content-type": "application/json" });
+async function gh(env, method, url, body, what) {
+  const r = await fetch(url, { method, headers: ghHeaders(env), ...(body ? { body: JSON.stringify(body) } : {}) });
+  if (!r.ok) throw Object.assign(new Error(`GitHub ${what}: ${r.status}`), { status: r.status });
+  return r.json();
+}
+
+// Записати кілька файлів у гілку одним комітом (Git Data API) — єдиний шлях запису бота.
+//   files:  {шлях: обʼєкт} — що записати (JSON з відступом 1 і переносом рядка в кінці), лише змінені файли;
+//   expect: {шлях: sha|null} — sha блобів, які ми прочитали (null — файла не було). Якщо на голові гілки інакше —
+//           дані змінилися після читання: конфлікт, крок треба перерахувати.
+// GET ref → коміт → дерево (перевірка expect) → POST tree (base_tree, вміст inline) → POST commit (parent — голова) →
+// PATCH ref (force: false). Не fast-forward (хтось закомітив між GET ref і PATCH) — теж конфлікт.
+// Помилка конфлікту має conflict: true. Повертає false, якщо вміст не змінився (коміт не створюється).
+async function ghCommit(env, files, expect, message) {
+  const base = `${ghApi(env)}/repos/${env.GH_REPO}/git`, branch = env.GH_BRANCH || "main";
+  const conflict = (reason) => Object.assign(new Error(`GitHub запис ${Object.keys(files).join(" + ")}: конфлікт (${reason})`), { conflict: true, reason });
+  const head = (await gh(env, "GET", `${base}/ref/heads/${branch}`, null, "читання гілки")).object.sha;
+  const tree = (await gh(env, "GET", `${base}/commits/${head}`, null, "читання коміту")).tree.sha;
+  if (expect && Object.keys(expect).length) {
+    const t = await gh(env, "GET", `${base}/trees/${tree}`, null, "читання дерева");
+    const cur = {};
+    for (const e of t.tree || []) if (e.type === "blob") cur[e.path] = e.sha;
+    for (const [p, sha] of Object.entries(expect)) if ((cur[p] || null) !== (sha || null)) throw conflict(p + " змінено");
+  }
+  const entries = Object.entries(files).map(([path, obj]) => ({ path, mode: "100644", type: "blob", content: JSON.stringify(obj, null, 1) + "\n" }));
+  const nt = (await gh(env, "POST", `${base}/trees`, { base_tree: tree, tree: entries }, "запис дерева")).sha;
+  if (nt === tree) return false;
+  const c = (await gh(env, "POST", `${base}/commits`, { message, tree: nt, parents: [head] }, "запис коміту")).sha;
+  try { await gh(env, "PATCH", `${base}/refs/heads/${branch}`, { sha: c, force: false }, "оновлення гілки"); }
+  catch (e) { if (e.status === 409 || e.status === 422) throw conflict("гілку змінено"); throw e; }
+  return true;
+}
+
 async function ghRead(env, file) {
   const r = await fetch(`${ghApi(env)}/repos/${env.GH_REPO}/contents/${file}?ref=${encodeURIComponent(env.GH_BRANCH || "main")}`, { headers: ghHeaders(env) });
   if (r.status === 404) return null;
@@ -315,7 +343,6 @@ async function ghRead(env, file) {
   return { text: unb64(j.content || ""), sha: j.sha };
 }
 function unb64(s) { const bin = atob(s.replace(/\s/g, "")); const u = new Uint8Array(bin.length); for (let i = 0; i < bin.length; i++) u[i] = bin.charCodeAt(i); return new TextDecoder().decode(u); }
-function b64(s) { const u = new TextEncoder().encode(s); let bin = ""; for (let i = 0; i < u.length; i += 0x8000) bin += String.fromCharCode.apply(null, u.subarray(i, i + 0x8000)); return btoa(bin); }
 
 // ---------- Telegram ----------
 // Адреса містить токен, тому її ніколи не логуємо — лише метод і опис помилки.
