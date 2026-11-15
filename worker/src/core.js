@@ -223,7 +223,7 @@ export const mainKb = (admin, C) => {
   const btn = (text) => (bank && text === MENU.topup[0] ? { text, web_app: { url: bank } } : { text });
   return {
     keyboard: [[MENU.in[0], MENU.out[0]], [MENU.who[0], MENU.weather[0]], [MENU.balance[0], MENU.topup[0]], [MENU.stats[0]], ...(admin ? [[MENU.admin[0]]] : [])].map((r) => r.map(btn)),
-    is_persistent: true, resize_keyboard: true,
+    resize_keyboard: true, // без is_persistent: гравець може згорнути клавіатуру, а «Назад» на Android виходить із чату
   };
 };
 // Інлайн-меню адміна (callback_data «adm:…» без «|» — щоб не плутатись із третьою частиною «гравець» у режимі тесту)

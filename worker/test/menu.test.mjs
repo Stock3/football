@@ -103,7 +103,7 @@ test("/start: гравець — клавіатура 4 рядки без «Ві
   const rows = (r) => r.msgs[0].kb.keyboard.map((x) => x.map((b) => b.text));
   const p = core.onMessage(C, pm("/start p2", 555));
   assert.deepEqual(rows(p), [["✅ Хочу грати", "❌ Не зможу"], ["👥 Хто йде", "🌦 Погода"], ["💰 Баланс", "💳 Поповнити"], ["📊 Статистика"]]);
-  assert.equal(p.msgs[0].kb.is_persistent, true);
+  assert.ok(!p.msgs[0].kb.is_persistent);
   assert.equal(p.msgs[0].kb.resize_keyboard, true);
   assert.match(p.msgs[0].text, /Привіт, Борис!/);
   const a = core.onMessage(C, pm("/start p1", 556));
@@ -121,7 +121,7 @@ test("/start через бота: клавіатура йде в reply_markup п
   const w = mockWorld({ tg: {} });
   await say("/start p1", 555);
   assert.equal(last(w).chat_id, 555);
-  assert.equal(last(w).reply_markup.is_persistent, true);
+  assert.ok(!last(w).reply_markup.is_persistent);
   assert.ok(last(w).reply_markup.keyboard.flat().some((b) => b.text === "⚙️ Адмін"));
   assert.equal(tgState(w).chats.p1.id, 555);
   await say("/start p2", 556);
@@ -289,7 +289,7 @@ test("розсилка несе клавіатуру внизу: гравцю �
   const org = got.find((m) => m.chat_id === ADMIN);
   assert.deepEqual(org.reply_markup, core.mainKb(true, KC));
   assert.ok(flat(org).includes("⚙️ Адмін"));
-  assert.ok(got.every((m) => m.reply_markup && m.reply_markup.is_persistent));
+  assert.ok(got.every((m) => m.reply_markup && m.reply_markup.keyboard && !m.reply_markup.is_persistent));
 });
 
 test("розсилка в режимі тесту: усе в чат адміна, і клавіатура — адмінська", async (t) => {
