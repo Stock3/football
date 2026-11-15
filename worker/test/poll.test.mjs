@@ -338,22 +338,41 @@ test("тихі години для оплати: нагадування за р�
   assert.ok(core.reminders(core.context({ data, DEF, tg, now: new Date("2026-11-12T01:00:00Z") }), { manual: true }).msgs.length > 0);
 });
 
-// ---------- підсумок гри й оплата ----------
+// ---------- підсумок гри й баланс ----------
 function pgFixture(sy, sb) {
   const data = fixture();
-  data.games = [{ id: "g7", date: "2026-11-06", y: ["p1", "p2", "p3"], b: ["p4", "p6"], gy: 0, gb: 0, sy, sb, paid: ["p3"] }];
+  data.games = [{ id: "g7", date: "2026-11-06", y: ["p1", "p2", "p3"], b: ["p4", "p6"], gy: 1, gb: 0, sy, sb, paid: ["p3"] }];
+  data.players[2].top = [{ id: "t1", d: "2026-11-01", a: 200 }]; // Вова поповнив наперед
   return data;
 }
 const ctxNow = (data, tg, now = NOW) => core.context({ data, DEF, tg: tg || { chats: allChats() }, now, site: "", rand: () => 0 });
-test("підсумок гри: тексти перемоги / поразки / нічиї з оплатою; оплачені пропускаються; організатор теж отримує", () => {
+test("підсумок гри: результат + списано й баланс кожному гравцю, організатору теж; банка — лише в мінусі; paid не враховується", () => {
   const r = core.postGame(ctxNow(pgFixture(10, 8)), "g7");
-  assert.deepEqual(r.msgs.map((m) => m.pid), ["p1", "p2", "p4", "p6"]); // p3 оплатив; p1 — організатор
-  assert.equal(r.msgs[0].text, "🏆 Аня, класна гра — перемога 10:8! За гру 6 листопада: 81 грн на 1234 5678 1234 5678");
-  assert.match(r.msgs.find((m) => m.pid === "p4").text, /^💪 Гліб, сьогодні не пощастило, 8:10, наступного разу наша!.*81 грн на 1234/);
-  assert.match(core.postGame(ctxNow(pgFixture(4, 4)), "g7").msgs[0].text, /^🤝 Аня, нічия 4:4/);
+  assert.deepEqual(r.msgs.map((m) => m.pid), ["p1", "p2", "p3", "p4", "p6"]); // p1 — організатор; p3 зі старим paid теж
+  assert.equal(r.msgs[0].text, "🏆 Аня, класна гра — перемога 10:8!\nСписано 81 грн за гру 6 листопада · баланс -81 грн\nкартка 1234 5678 1234 5678");
+  assert.equal(r.msgs[2].text, "🏆 Вова, класна гра — перемога 10:8!\nСписано 81 грн за гру 6 листопада · баланс 119 грн");
+  assert.match(r.msgs.find((m) => m.pid === "p4").text, /^💪 Гліб, сьогодні не пощастило, 8:10, наступного разу наша!\nСписано 81 грн за гру 6 листопада · баланс -81 грн\nкартка 1234/);
+  assert.match(core.postGame(ctxNow(pgFixture(4, 4)), "g7").msgs[0].text, /^🤝 Аня, нічия 4:4 — нікому не прикро!\nСписано 81 грн/);
   assert.deepEqual(r.msgs[0].ops, [{ op: "pg", gid: "g7", pid: "p1", at: NOW.toISOString() }]);
 });
-test("підсумок гри — ніколи двічі; без рахунку й старі ігри — ні", () => {
+test("підсумок гри: ціна зі знімка гри (pr), банка з налаштувань; свій текст без {jar} — посилання дописується, лише якщо в мінусі", () => {
+  const data = pgFixture(10, 8);
+  data.games[0].pr = 100; data.settings.price = 120; data.settings.bank = "https://send.monobank.ua/jar/xyz";
+  data.settings.postW = ["{name}: {score}, мінус {charge}, баланс {balance}"];
+  const r = core.postGame(ctxNow(data), "g7");
+  assert.equal(r.msgs[0].text, "Аня: 10:8, мінус 100, баланс -100\nhttps://send.monobank.ua/jar/xyz");
+  assert.equal(r.msgs[2].text, "Вова: 10:8, мінус 100, баланс 100");
+});
+test("старі тексти з {card}/{sum}/{debt} у data.json замінюються стандартними", () => {
+  const data = pgFixture(10, 8);
+  data.settings.postW = ["🏆 {name}, за гру {date}: {sum} грн на {card} {cardName}\n{bank}"];
+  data.settings.reminders = ["{name}, борг {sum} грн за {debt}"];
+  const C = ctxNow(data);
+  assert.deepEqual(C.S.postW, DEF.postW);
+  assert.deepEqual(C.S.reminders, DEF.reminders);
+  assert.equal(core.postGame(C, "g7").msgs[0].text.split("\n")[1], "Списано 81 грн за гру 6 листопада · баланс -81 грн");
+});
+test("підсумок гри — ніколи двічі; без рахунку, скасовані й старі ігри — ні", () => {
   const data = pgFixture(10, 8), C = ctxNow(data);
   const r = core.postGame(C);
   const tg = core.applyOps(C.tg, r.msgs.flatMap((m) => m.ops), data, C.T.date);
@@ -362,19 +381,17 @@ test("підсумок гри — ніколи двічі; без рахунку
   assert.equal(core.postGame(ctxNow(pgFixture(10, 8), null, new Date("2026-11-20T10:00:00Z"))).msgs.length, 0, "старше 7 днів");
   const d2 = pgFixture(10, 8); delete d2.games[0].sy; delete d2.games[0].sb;
   assert.equal(core.postGame(ctxNow(d2)).msgs.length, 0);
+  const d3 = pgFixture(10, 8); d3.games[0].x = true;
+  assert.equal(core.postGame(ctxNow(d3)).msgs.length, 0, "скасована");
 });
-test("оплата наперед (гра ще без рахунку) → окрема подяка; організатора теж можна позначити, але боргу в нього немає", () => {
+test("старий paid (і на запланованій грі) нічого не надсилає; організатор у мінусі отримує нагадування", () => {
   const data = fixture();
   data.games.push({ id: GID, date: "2026-11-13", c: ["p2", "p1"], y: [], b: [], gy: 0, gb: 0, paid: ["p2", "p1"] });
   const C = ctxNow(data);
-  const r = core.thanks(C);
-  const p2 = r.msgs.find((m) => m.pid === "p2");
-  assert.equal(p2.text, DEF.prepaid[0].replace("{name}", "Борис").replace("{sum}", "81").replace("{date}", "13 листопада"));
-  assert.ok(r.msgs.find((m) => m.pid === "p1"), "організатор теж отримує подяку");
-  const tg = core.applyOps(C.tg, r.msgs.flatMap((m) => m.ops), data, C.T.date);
-  assert.equal(core.thanks(ctxNow(data, tg)).msgs.filter((m) => m.pid === "p2").length, 0);
-  // організатор не боржник: у g1 він не оплачений, але нагадування йому немає
-  assert.ok(!core.reminders(C, { manual: true }).msgs.some((m) => m.pid === "p1"));
+  assert.equal(core.thanks(C).msgs.length, 0);
+  const rm = core.reminders(C, { manual: true });
+  assert.deepEqual(rm.msgs.map((m) => m.pid).sort(), ["p1", "p2", "p3", "p4"]); // p1 — організатор
+  assert.match(rm.msgs.find((m) => m.pid === "p1").text, /^👋 Аня, баланс у мінусі \(-81 грн\), поповни: картка 1234 5678 1234 5678/);
 });
 
 // ---------- погода ----------

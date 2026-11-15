@@ -6,7 +6,8 @@
 //   POST /tg      — webhook Telegram (перевірка X-Telegram-Bot-Api-Secret-Token)
 //   POST /notify  — кнопки сайту {mode: thanks|remind|gather|cancel|sync|played|unlink, player?, game?}; Authorization: Bearer <GitHub-токен редактора>
 //                   unlink — прибрати привʼязку чату гравця (tg.json), без повідомлення гравцю
-//                   sync/played — сайт щойно зберіг data.json: звірити опитування, надіслати підсумок гри й подяки
+//                   thanks — подяки за нові поповнення балансу
+//                   sync/played — сайт щойно зберіг data.json: звірити опитування, надіслати підсумок гри зі списанням і подяки за поповнення
 //   GET  /setup?key=TG_SECRET — підключити webhook і меню команд
 //   GET  /health  — «ok»
 // Режим тесту (settings.testMode): усі повідомлення гравцям іде адміну (settings.org) з позначкою «👤 для Імʼя:», кнопки в них діють
@@ -232,7 +233,8 @@ async function setup(url, env) {
     { command: "who", description: "Хто йде" },
     { command: "in", description: "Хочу грати" },
     { command: "out", description: "Не зможу" },
-    { command: "status", description: "Мій борг за ігри" },
+    { command: "balance", description: "Мій баланс" },
+    { command: "topup", description: "Поповнити баланс" },
     { command: "weather", description: "Погода на пʼятницю" },
     { command: "stop", description: "Не писати мені" },
   ] });

@@ -6,10 +6,13 @@
 // Операції повідомлення (напр. «подяку надіслано») застосовуються, лише якщо Telegram прийняв повідомлення.
 // Опитування «хто йде» (tg.poll і склад гри в data.json) — окремо, у poll.js.
 import { WX } from "./wx.js";
+import { BAL } from "./bal.js";
 
-export { WX };
+export { WX, BAL };
 export const THANKS_WINDOW_DAYS = 21; // не дякувати за давні ігри (напр. коли людина підключила бота пізніше)
-export const POSTGAME_DAYS = 7; // підсумок гри з оплатою — лише за свіжі ігри (рахунок могли внести й пізніше)
+export const POSTGAME_DAYS = 7; // підсумок гри зі списанням — лише за свіжі ігри (рахунок могли внести й пізніше)
+// Тексти, у яких змінилися підстановки при переході з «боргу за гру» на баланс: старі (з {debt}, {card}, /status…) замінюються стандартними
+const BAL_TEXTS = ["thanks", "reminders", "postW", "postL", "postD", "hello"];
 
 const MONG = ["січня", "лютого", "березня", "квітня", "травня", "червня", "липня", "серпня", "вересня", "жовтня", "листопада", "грудня"];
 export const DAYS = ["неділя", "понеділок", "вівторок", "середа", "четвер", "пʼятниця", "субота"];
@@ -29,6 +32,7 @@ export function settings(data, DEF) {
   S.verdicts = { ...DEF.verdicts, ...(st.verdicts || {}) };
   S.poll = normPoll(st.poll, DEF);
   S.say = { ...(DEF.say || {}), ...(st.say || {}) };
+  for (const k of BAL_TEXTS) if ([].concat(S[k] ?? []).some(BAL.legacy)) S[k] = DEF[k];
   return S;
 }
 // Старий формат {after,every,max,hour} працює як є: hour стає часом відправки, тихих годин немає.
@@ -71,8 +75,9 @@ export function nextFriday(T) {
 export const gameTime = (S) => hm(S.time) || "21:00";
 
 // ---------- стан (tg.json) ----------
-// { chats: {pid: {id, u, at}}, sent: {gid: {pid: {thx?, pg?, r: []}}}, slots: ["YYYY-MM-DD HH:MM"], poll? }
-// pg — коли надіслано підсумок гри з оплатою; poll — стан опитування (див. poll.js).
+// { chats: {pid: {id, u, at}}, sent: {id: {pid: {thx?, pg?, r: []}}}, slots: ["YYYY-MM-DD HH:MM"], poll? }
+// id у sent — або id гри (pg — підсумок гри зі списанням; r — нагадування про мінусовий баланс, привʼязані до останньої списаної гри),
+// або id поповнення players[].top[].id (thx — подяку за поповнення надіслано). poll — стан опитування (див. poll.js).
 // r — записи «YYYY-MM-DD HH:MM» (слот розкладу) або «YYYY-MM-DD manual» (кнопка на сайті); старі — просто дата.
 export function normState(tg) {
   tg = tg && typeof tg === "object" ? tg : {};
@@ -98,8 +103,8 @@ export function applyOps(tg, ops, data, today) {
   }
   // оброблені слоти потрібні лише на сьогодні; тримаємо тиждень про запас
   if (today) s.slots = s.slots.filter((k) => dayDiff(k.slice(0, 10), today) <= 7);
-  // прибрати стан ігор, яких уже немає, і порожні записи
-  const ids = new Set(((data && data.games) || []).map((g) => g.id));
+  // прибрати стан ігор і поповнень, яких уже немає, і порожні записи
+  const ids = new Set([...((data && data.games) || []).map((g) => g.id), ...topIds(data)]);
   for (const gid of Object.keys(s.sent)) {
     if (data && !ids.has(gid)) { delete s.sent[gid]; continue; }
     for (const pid of Object.keys(s.sent[gid])) { const x = s.sent[gid][pid]; if (!x.thx && !x.pg && !(x.r || []).length) delete s.sent[gid][pid]; }
@@ -115,7 +120,7 @@ export function describeOps(ops, data) {
   const links = ops.filter((o) => o.op === "link").map((o) => name(o.pid)), un = ops.filter((o) => o.op === "unlink").map((o) => name(o.pid));
   if (links.length) parts.push("підключено " + links.join(", "));
   if (un.length) parts.push("відключено " + un.join(", "));
-  if (ops.some((o) => o.op === "thx")) parts.push("подяки");
+  if (ops.some((o) => o.op === "thx")) parts.push("подяки за поповнення");
   if (ops.some((o) => o.op === "pg")) parts.push("підсумки гри");
   if (ops.some((o) => o.op === "r")) parts.push("нагадування");
   if (!parts.length) parts.push("оновлено стан");
@@ -157,32 +162,32 @@ export function findPlayers(C, q) {
 // так не спалюються прапорці «вже надіслано» для реальних ігор.
 const inTestScope = (C, g) => !testOn(C) || (!!C.tg.poll && C.tg.poll.game === g.id);
 
-export const played = (g) => !g.x && g.sy != null && g.sb != null && g.sy !== "" && g.sb !== ""; // x — скасована гра
-const tracked = (C, g) => played(g) && !!C.S.payFrom && g.date >= C.S.payFrom;
-// платять усі гравці гри, крім організатора
-const payers = (C, g) => [...(g.y || []), ...(g.b || [])].filter((id) => id !== C.S.org);
-const unpaidOf = (C, pid) => C.games.filter((g) => payers(C, g).includes(pid) && !(g.paid || []).includes(pid));
+export const played = (g) => BAL.played(g); // x — скасована гра
+const tracked = (C, g) => BAL.charged(g, C.S); // за гру списується (зіграна з датою ≥ payFrom)
 export const nameOf = (C, pid) => (C.players[pid] && C.players[pid].name) || pid;
-const debtPhrase = (list) => {
-  const ds = list.map((g) => dmon(g.date));
-  return (ds.length > 1 ? "ігри " : "гру ") + (ds.length > 1 ? ds.slice(0, -1).join(", ") + " і " + ds.at(-1) : ds[0]);
-};
 export const fmtCard = (c) => { const d = String(c || "").replace(/\D/g, ""); return d.length === 16 ? d.replace(/(\d{4})(?=\d)/g, "$1 ") : String(c || ""); };
 export const pick = (C, arr) => (arr && arr.length ? arr[Math.floor(C.rand() * arr.length)] : "") || "";
 export const fill = (t, v) => String(t).replace(/\{(\w+)\}/g, (m, k) => (v[k] != null ? v[k] : m)).replace(/[ \t]+\n/g, "\n").replace(/ {2,}/g, " ").trim();
 export const gameIds = (g) => [...new Set([...(g.c || []), ...(g.y || []), ...(g.b || [])])];
-const payVars = (C) => ({ card: fmtCard(C.S.card), cardName: C.S.cardName ? `(${C.S.cardName})` : "", bank: C.S.bank || "", site: C.site });
 
-function vars(C, pid, list) {
-  const g = list.at(-1), S = C.S;
-  const side = g && (g.y || []).includes(pid) ? "y" : "b";
-  const my = g ? (side === "y" ? +g.sy : +g.sb) : 0, op = g ? (side === "y" ? +g.sb : +g.sy) : 0;
-  const r = my > op ? "w" : my < op ? "l" : "d";
-  return {
-    name: nameOf(C, pid), date: g ? dmon(g.date) : "", score: g && played(g) ? `${g.sy}:${g.sb}` : "", verdict: g && played(g) ? pick(C, S.verdicts[r]) : "",
-    sum: list.length * S.price, debt: list.length ? debtPhrase(list) : "", ...payVars(C),
-  };
+// ---------- баланс ----------
+// Розрахунок — у спільному з сайтом блоці BAL (index.html → src/bal.js): поповнення players[].top мінус ціна гри (g.pr ?? settings.price)
+// за кожну зіграну гру з датою ≥ payFrom, де гравець у y або b. Організатор теж платить, гості — ні; games[].paid не враховується.
+export const topIds = (data) => ((data && data.players) || []).flatMap((p) => (Array.isArray(p.top) ? p.top : []).map((t) => t && t.id).filter(Boolean));
+export const balInfo = (C, pid) => BAL.info(C.data, C.S, pid);
+export const money = (n) => BAL.fmt(n);
+// Куди поповнювати: банка Monobank (settings.bank); якщо її не вказано — картка
+export function jarText(C) {
+  const S = C.S;
+  if (S.bank) return S.bank;
+  return S.card ? "картка " + fmtCard(S.card) + (S.cardName ? ` (${S.cardName})` : "") : "";
 }
+// Остання списана гра: «13.11, 81 грн»
+const lastCharge = (I) => { if (!I.lastGame) return ""; const p = I.lastGame.d.split("-"); return `${p[2]}.${p[1]}, ${money(I.lastGame.a)} грн`; };
+// Баланс у мінусі, а в тексті немає {jar} — посилання дописується в кінці
+const withJar = (C, t, bal) => (bal < 0 && jarText(C) && !String(t).includes("{jar}") ? t + "\n{jar}" : t);
+const balVars = (C, pid, bal) => ({ name: nameOf(C, pid), balance: money(bal), jar: bal < 0 ? jarText(C) : "", site: C.site });
+
 export function gameVars(C, g, pid) {
   const ids = gameIds(g), guests = (+g.gy || 0) + (+g.gb || 0);
   return {
@@ -237,7 +242,7 @@ export function onMessage(C, m, as) {
     // якщо в профілі вказано username, підключитися може лише ця людина
     if (p.tg && p.tg.toLowerCase() !== uname.toLowerCase()) return say(`Це посилання для гравця ${p.name} 🙂 Відкрий свій профіль на сайті.`);
     out.ops.push({ op: "link", pid: p.id, id: chatId, u: uname, at: C.now.toISOString() });
-    return say(fill(C.S.hello, vars(C, p.id, [])));
+    return say(fill(C.S.hello, { name: p.name, site: C.site }));
   }
   if (c === "/stop") {
     if (pid) out.ops.push({ op: "unlink", pid });
@@ -260,14 +265,26 @@ export function onMessage(C, m, as) {
     if (!pid) return say(unknown);
     return { ...out, poll: { t: "ask", chat: chatId, ...asEv } };
   }
-  if (c === "/status" || /^борг/i.test(text) || /^оплат/i.test(text)) {
+  if (c === "/balance" || /^баланс/i.test(text)) {
     if (!pid) return say(unknown);
-    const list = unpaidOf(C, pid);
-    if (!list.length) return say(`✅ ${nameOf(C, pid)}, боргів немає. Гордість бухгалтерії 🏆`);
-    const v = vars(C, pid, list);
-    return say(fill(`💸 ${v.name}, не оплачено за {debt}. Разом {sum} грн.\nКартка: {card} {cardName}${C.S.bank ? "\n{bank}" : ""}`, v));
+    return say(balanceReply(C, pid));
   }
-  return say("Я вмію: /who — хто йде, /in — хочу грати, /out — не зможу прийти, /status — перевірити оплату, /weather — погода на пʼятницю, /stop — не писати мені 🙂");
+  if (c === "/topup" || /^поповн/i.test(text)) {
+    if (!pid) return say(unknown);
+    return say(topupReply(C, pid));
+  }
+  return say("Я вмію: /who — хто йде, /in — хочу грати, /out — не зможу прийти, /balance — мій баланс, /topup — поповнити баланс, /weather — погода на пʼятницю, /stop — не писати мені 🙂");
+}
+
+// /balance: баланс, остання списана гра і, якщо в мінусі, куди поповнити
+export function balanceReply(C, pid) {
+  const I = balInfo(C, pid), jar = jarText(C), lc = lastCharge(I);
+  return `💰 Баланс: ${money(I.bal)} грн` + (lc ? `\nОстання списана гра: ${lc}` : "") + (I.bal < 0 && jar ? `\nПоповнити: ${jar}` : "");
+}
+// /topup: баланс і куди поповнити
+export function topupReply(C, pid) {
+  const I = balInfo(C, pid), jar = jarText(C);
+  return `💰 Баланс: ${money(I.bal)} грн\n` + (jar ? `Поповнити: ${jar}\nЩойно організатор зарахує поповнення, я напишу 🙂` : "Реквізити для поповнення ще не вказані — запитай в організатора");
 }
 
 // ---------- погода ----------
@@ -279,33 +296,27 @@ export function weatherReply(C, json, date) {
   return WX.text(w, { city: S.city, verdicts: { dry: S.wxDry, rain: S.wxRain, warn: S.wxWarn } });
 }
 
-// ---------- 2. подяки ----------
-// За будь-яку гру з позначеною оплатою — і зіграну, і ще заплановану (оплата наперед: окремі тексти prepaid).
-// Організатор теж отримує подяку, якщо його позначили (у боргах і нагадуваннях його немає).
+// ---------- 2. подяки за поповнення ----------
+// Кожне нове поповнення (players[].top з id і сумою > 0, не давніше THANKS_WINDOW_DAYS) — один раз: «зараховано X грн, баланс N грн».
+// Кілька нових поповнень одного гравця — одним повідомленням (сума). Прапорець — tg.json sent[id поповнення][pid].thx.
+// У режимі тесту подяки не надсилаються зовсім: поповнення реальні, тож подяка дійде гравцю, коли тест вимкнуть.
 export function thanks(C) {
   const out = { msgs: [], ops: [] };
-  if (!C.S.payFrom) return out;
-  const byPlayer = {};
-  for (const g of [...C.data.games].sort((a, b) => (a.date < b.date ? -1 : 1))) {
-    if (g.x || g.date < C.S.payFrom || dayDiff(g.date, C.T.date) > THANKS_WINDOW_DAYS || !inTestScope(C, g)) continue;
-    const pl = played(g);
-    for (const pid of gameIds(g)) {
-      if (!(g.paid || []).includes(pid) || !chatFor(C, pid) || sentGet(C.tg, g.id, pid).thx) continue;
-      const b = (byPlayer[pid] ??= { done: [], pre: [] });
-      (pl ? b.done : b.pre).push(g);
-    }
-  }
+  if (testOn(C)) return out;
   const at = C.now.toISOString();
-  for (const [pid, b] of Object.entries(byPlayer)) {
-    if (b.done.length) out.msgs.push(toPlayer(C, pid, fill(pick(C, C.S.thanks), vars(C, pid, b.done)), b.done.map((g) => ({ op: "thx", gid: g.id, pid, at }))));
-    if (b.pre.length) out.msgs.push(toPlayer(C, pid, fill(pick(C, C.S.prepaid), vars(C, pid, b.pre)), b.pre.map((g) => ({ op: "thx", gid: g.id, pid, at }))));
+  for (const p of C.data.players) {
+    const fresh = BAL.tops(p).filter((t) => t.id && +t.a > 0 && dayDiff(t.d, C.T.date) <= THANKS_WINDOW_DAYS && !sentGet(C.tg, t.id, p.id).thx);
+    if (!fresh.length || !chatFor(C, p.id)) continue;
+    const bal = balInfo(C, p.id).bal, sum = fresh.reduce((s, t) => s + +t.a, 0);
+    const t = withJar(C, pick(C, C.S.thanks), bal);
+    out.msgs.push(toPlayer(C, p.id, fill(t, { ...balVars(C, p.id, bal), amount: money(sum), date: dmon(fresh.at(-1).d) }), fresh.map((x) => ({ op: "thx", gid: x.id, pid: p.id, at }))));
   }
   return out;
 }
 
-// ---------- 2б. підсумок гри з оплатою ----------
-// Один раз кожному гравцю гри (y+b, разом з організатором), хто ще не позначений як оплачений.
-// gid — лише ця гра (кнопка сайту), без нього — усі свіжі ігри (cron-страховка).
+// ---------- 2б. підсумок гри зі списанням ----------
+// Один раз кожному гравцю гри (y+b, разом з організатором): результат + «списано {charge} грн за гру {date} · баланс {balance} грн»,
+// а якщо баланс у мінусі — посилання на банку ({jar}). gid — лише ця гра (кнопка сайту), без нього — усі свіжі ігри (cron-страховка).
 export function postGame(C, gid) {
   const out = { msgs: [], ops: [], missing: [] };
   const at = C.now.toISOString();
@@ -314,12 +325,14 @@ export function postGame(C, gid) {
     const age = dayDiff(g.date, C.T.date);
     if (age < 0 || age > POSTGAME_DAYS) continue;
     for (const pid of [...new Set([...(g.y || []), ...(g.b || [])])]) {
-      if ((g.paid || []).includes(pid) || sentGet(C.tg, g.id, pid).pg) continue;
+      if (sentGet(C.tg, g.id, pid).pg) continue;
       if (!chatFor(C, pid)) { out.missing.push(nameOf(C, pid)); continue; }
       const my = (g.y || []).includes(pid) ? +g.sy : +g.sb, op = (g.y || []).includes(pid) ? +g.sb : +g.sy;
-      const list = my > op ? C.S.postW : my < op ? C.S.postL : C.S.postD;
-      const v = { name: nameOf(C, pid), date: dmon(g.date), score: `${my}:${op}`, sum: C.S.price, ...payVars(C) };
-      out.msgs.push(toPlayer(C, pid, fill(pick(C, list), v), [{ op: "pg", gid: g.id, pid, at }]));
+      const r = my > op ? "w" : my < op ? "l" : "d";
+      const list = r === "w" ? C.S.postW : r === "l" ? C.S.postL : C.S.postD;
+      const bal = balInfo(C, pid).bal;
+      const v = { ...balVars(C, pid, bal), date: dmon(g.date), score: `${my}:${op}`, verdict: pick(C, C.S.verdicts[r]), charge: money(BAL.charge(g, C.S)) };
+      out.msgs.push(toPlayer(C, pid, fill(withJar(C, pick(C, list), bal), v), [{ op: "pg", gid: g.id, pid, at }]));
     }
   }
   return out;
@@ -341,8 +354,11 @@ export function dueSlots(C) {
   return slots;
 }
 
-// manual — кнопка на сайті (без розкладу й тихих годин); player — id або порожньо (усім боржникам).
-// Повертає також missing — боржників без бота (лише для ручного режиму).
+// Кому: кожному з балансом < 0, організатору теж. Розклад рахується від останньої списаної гри гравця:
+// «через N днів після гри» / «у дні тижня», не більше max нагадувань на цю гру, кожні every днів (лічильник — sent[гра][pid].r).
+// Зіграв ще одну гру й досі в мінусі — лічильник починається знову з нової гри.
+// manual — кнопка на сайті (без розкладу й тихих годин); player — id або порожньо (усім з мінусовим балансом).
+// Повертає також missing — тих, у кого мінус, але немає бота (лише для ручного режиму).
 export function reminders(C, { manual = false, player = "" } = {}) {
   const out = { msgs: [], ops: [], missing: [] };
   if (!C.S.payFrom) return out;
@@ -350,25 +366,26 @@ export function reminders(C, { manual = false, player = "" } = {}) {
   const slots = manual ? [] : dueSlots(C);
   if (!manual && !slots.length) return out;
   const key = manual ? T.date + " manual" : slots.at(-1);
-  const ids = manual ? (player ? [player] : [...new Set(C.games.flatMap((g) => payers(C, g)))]) : testOn(C) ? C.data.players.map((p) => p.id) : Object.keys(C.tg.chats);
+  const ids = manual && player ? [player] : manual || testOn(C) ? C.data.players.map((p) => p.id) : Object.keys(C.tg.chats);
   for (const pid of ids) {
-    const list = unpaidOf(C, pid);
-    if (!list.length) continue;
-    if (!chatFor(C, pid)) { if (manual) out.missing.push(nameOf(C, pid)); continue; }
+    const bal = balInfo(C, pid).bal;
+    if (!(bal < 0)) continue;
+    // остання списана гра гравця (у режимі тесту — лише тестова гра)
+    const g = C.games.filter((x) => BAL.inGame(x, pid)).at(-1);
     if (!manual) {
+      if (!g) continue;
+      const r = sentGet(C.tg, g.id, pid).r, last = r.length ? r.at(-1).slice(0, 10) : "";
       // уже нагадали в цей слот, вручну сьогодні або за старим форматом (лише дата)
-      if (list.some((g) => sentGet(C.tg, g.id, pid).r.some((x) => slots.includes(x) || x === T.date || x === T.date + " manual"))) continue;
-      const due = list.some((g) => {
-        const r = sentGet(C.tg, g.id, pid).r, last = r.length ? r.at(-1).slice(0, 10) : "";
-        const age = dayDiff(g.date, T.date);
-        if (R.mode === "days" ? age < 1 : age < R.after) return false;
-        if (r.length >= R.max) return false;
-        // кілька часів на день: у день нагадування спрацьовує кожен слот
-        return !last || last === T.date || dayDiff(last, T.date) >= R.every;
-      });
-      if (!due) continue;
+      if (r.some((x) => slots.includes(x) || x === T.date || x === T.date + " manual")) continue;
+      const age = dayDiff(g.date, T.date);
+      if (R.mode === "days" ? age < 1 : age < R.after) continue;
+      if (r.length >= R.max) continue;
+      // кілька часів на день: у день нагадування спрацьовує кожен слот
+      if (last && last !== T.date && dayDiff(last, T.date) < R.every) continue;
     }
-    out.msgs.push(toPlayer(C, pid, fill(pick(C, C.S.reminders), vars(C, pid, list)), list.map((g) => ({ op: "r", gid: g.id, pid, key }))));
+    if (!chatFor(C, pid)) { if (manual) out.missing.push(nameOf(C, pid)); continue; }
+    const t = withJar(C, pick(C, C.S.reminders), bal);
+    out.msgs.push(toPlayer(C, pid, fill(t, { ...balVars(C, pid, bal), date: g ? dmon(g.date) : "" }), g ? [{ op: "r", gid: g.id, pid, key }] : []));
   }
   if (slots.length && !testOn(C)) out.ops.push({ op: "slots", keys: slots }); // у тесті слот не «спалюємо»: дедуплікація — по r у грі
   return out;

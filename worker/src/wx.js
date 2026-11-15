@@ -1,4 +1,4 @@
-// АВТОМАТИЧНА КОПІЯ блоку погоди з index.html — не редагувати тут. Оновити: node worker/sync-wx.mjs
+// АВТОМАТИЧНА КОПІЯ блоку WX з index.html — не редагувати тут. Оновити: node worker/sync.mjs
 export const WX = (/*WX*/function(){
   var MODELS=[["ecmwf_ifs025","ECMWF"],["gfs_seamless","GFS"],["icon_seamless","ICON"]];
   var VARS=["temperature_2m","apparent_temperature","precipitation_probability","precipitation","wind_speed_10m","weather_code"];

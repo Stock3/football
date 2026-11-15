@@ -112,18 +112,18 @@ test("testMode: увесь сценарій — жодне повідомлен�
 
   // скасування гри, кнопки сайту
   await notify({ mode: "cancel", game: GID });
-  // рахунок і оплата (сайт зберіг data.json) → підсумок гри й подяка
+  // рахунок (сайт зберіг data.json) → підсумок гри зі списанням
   t.mock.timers.setTime(FRI_EVE.getTime());
-  setData(w, (d) => { const g = d.games.find((x) => x.id === GID); const ids = g.c; g.y = ids.slice(0, 5); g.b = ids.slice(5); g.c = []; g.sy = 3; g.sb = 2; g.paid = ["p3", "p2"]; });
+  setData(w, (d) => { const g = d.games.find((x) => x.id === GID); const ids = g.c; g.y = ids.slice(0, 5); g.b = ids.slice(5); g.c = []; g.sy = 3; g.sb = 2; });
   const b3 = mark(w);
   const j = await notify({ mode: "played", game: GID });
   assert.ok(j.ok);
   assert.ok(lastTo(w, b3).some((x) => /^👤 для Вова:/.test(x) && /3:2|2:3/.test(x)), "підсумок гри Вові");
-  // нагадування за розкладом: наступного дня о 12:00 — лише неоплатившим, усім у чат адміна
+  // нагадування за розкладом: наступного дня о 12:00 — усім у мінусі, у чат адміна
   t.mock.timers.setTime(SAT_NOON.getTime());
   const b4 = mark(w);
   await cron();
-  assert.ok(lastTo(w, b4).some((x) => /нагадую|бухгалтерія|борг/.test(x) && x.startsWith("👤 для ")), "нагадування боржникам");
+  assert.ok(lastTo(w, b4).some((x) => /баланс у мінусі/.test(x) && x.startsWith("👤 для ")), "нагадування тим, хто в мінусі");
 
   assert.ok(w.sent.length > 40);
   const strays = w.sent.filter((m) => m.chat_id !== ADMIN);
@@ -212,7 +212,7 @@ test("/as лише для адміна: гравець у режимі тест�
   await say("/poll");
   const n = mark(w), tg0 = w.files["tg.json"], d0 = w.files["data.json"];
   await say("/as Аня /poll", chat("p2")); // Борис
-  await say("/status", chat("p2"));
+  await say("/balance", chat("p2"));
   await say("/who", chat("p3"));
   await press("y|" + GID, chat("p2"));
   assert.equal(mark(w), n, "жодного нового повідомлення");
@@ -236,10 +236,13 @@ test("/testreset: чистить опитування й прапорці над
   const w = mockWorld();
   await say("/poll");
   await press(btn(w, "Борис", "Буду"));
-  // прапорці надсилання: подяка за оплату наперед
-  setData(w, (d) => { d.games.find((x) => x.id === GID).paid = ["p2"]; });
-  await notify({ mode: "thanks" });
-  assert.ok(tgState(w).sent[GID].p2.thx, "прапорець подяки стоїть");
+  // прапорці надсилання: підсумок тестової гри (рахунок внесли, потім прибрали)
+  const d0 = w.files["data.json"];
+  setData(w, (d) => { const g = d.games.find((x) => x.id === GID); g.y = ["p2"]; g.c = []; g.sy = 1; g.sb = 0; });
+  t.mock.timers.setTime(FRI_EVE.getTime());
+  await notify({ mode: "played", game: GID });
+  assert.ok(tgState(w).sent[GID].p2.pg, "прапорець підсумку стоїть");
+  w.files["data.json"] = d0; t.mock.timers.setTime(THU.getTime());
   const dBefore = w.files["data.json"];
   await say("/testreset");
   const tg = tgState(w);
@@ -260,13 +263,14 @@ test("/testreset: чистить опитування й прапорці над
 });
 
 // ---------- охоплення шляхів відправки ----------
-test("testMode: подяки, підсумок гри, нагадування — лише тестова гра, лише адміну; прапорці реальних ігор не палимо", async (t) => {
+test("testMode: підсумок гри, нагадування — лише тестова гра, лише адміну; подяки за поповнення не йдуть; прапорці реальних ігор не палимо", async (t) => {
   clock(t, SAT_NOON);
   const data = fixture();
   data.games = [
     { id: "g20261106", date: "2026-11-06", y: ["p2", "p3"], b: ["p4", "p6"], gy: 0, gb: 0, sy: 4, sb: 1, paid: ["p3"] }, // реальна давня гра
     { id: GID, date: "2026-11-13", y: ["p2", "p3"], b: ["p4", "p5"], gy: 0, gb: 0, sy: 2, sb: 2, paid: ["p3"] }, // тестова
   ];
+  data.players.find((p) => p.id === "p3").top = [{ id: "tt", d: "2026-11-13", a: 200 }]; // реальне поповнення: подяка — лише після тесту
   const tg = { chats: allChats(), poll: { game: GID, open: false, startedAt: "x", closedAt: "y", announced: null, short: false, queueFront: [], inv: {} } };
   const w = mockWorld({ data, tg });
   await cron();
@@ -277,6 +281,8 @@ test("testMode: подяки, підсумок гри, нагадування �
   assert.equal(st.sent.g20261106, undefined, "реальна гра: прапорці не чіпали");
   assert.ok(st.sent[GID], "тестова гра: прапорці стоять");
   assert.deepEqual(st.slots, [], "слот розкладу не «спалено»");
+  assert.equal(st.sent.tt, undefined, "подяку за поповнення в тесті не надсилаємо й не позначаємо");
+  assert.ok(!texts.some((x) => /зараховано/.test(x)));
   assert.ok(w.sent.some((m) => m.text.startsWith("👤 для Дана (немає бота):")), "підсумок гри гравцю без бота — адміну, з позначкою");
   const n = mark(w);
   await cron(); // повторний cron — нічого нового (прапорці працюють)

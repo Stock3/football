@@ -21,7 +21,7 @@ function fixture() {
     players: [
       { id: "p1", name: "Аня", active: true },
       { id: "p2", name: "Борис", active: true, tg: "bob" },
-      { id: "p3", name: "Вова", active: true },
+      { id: "p3", name: "Вова", active: true, top: [{ id: "t0", d: "2026-10-01", a: 81 }] }, // давнє поповнення: баланс 0, без подяки
       { id: "p4", name: "Гліб", active: true },
       { id: "p5", name: "Дана", active: true },
     ],
@@ -67,12 +67,26 @@ test("/start: невідомий гравець і невідомий username",
   assert.match(core.onMessage(C0(), pm("/start p99")).msgs[0].text, /Не знайшов такого гравця/);
   assert.match(core.onMessage(C0(), pm("/start", 1, "nobody")).msgs[0].text, /Щоб я знав, хто ти/);
 });
-test("/status: борг підключеного, незнайомцю — підказка", () => {
-  const t = core.onMessage(C0(), pm("/status", 101)).msgs[0].text;
-  assert.match(t, /Аня, не оплачено за гру 6 листопада\. Разом 81 грн/);
-  assert.match(t, /1234 5678 1234 5678/);
-  assert.match(core.onMessage(C0(), pm("/status", 103)).msgs[0].text, /боргів немає/);
-  assert.match(core.onMessage(C0(), pm("/status", 999)).msgs[0].text, /Я тебе ще не знаю/);
+test("/balance: баланс, остання списана гра, банка — лише в мінусі; незнайомцю — підказка; /status більше немає", () => {
+  const data = fixture(); data.settings.bank = "https://send.monobank.ua/jar/abc";
+  data.players[2].top.push({ id: "t1", d: "2026-11-07", a: 19.5 });
+  const C = C0({ data });
+  assert.equal(core.onMessage(C, pm("/balance", 101)).msgs[0].text, "💰 Баланс: -81 грн\nОстання списана гра: 06.11, 81 грн\nПоповнити: https://send.monobank.ua/jar/abc");
+  assert.equal(core.onMessage(C, pm("/balance", 103)).msgs[0].text, "💰 Баланс: 19,5 грн\nОстання списана гра: 06.11, 81 грн");
+  assert.equal(core.onMessage(C, pm("баланс", 103)).msgs[0].text, "💰 Баланс: 19,5 грн\nОстання списана гра: 06.11, 81 грн");
+  assert.match(core.onMessage(C, pm("/balance", 999)).msgs[0].text, /Я тебе ще не знаю/);
+  assert.match(core.onMessage(C, pm("/status", 101)).msgs[0].text, /^Я вмію: .*\/balance — мій баланс, \/topup — поповнити баланс/);
+  // без банки — картка
+  assert.match(core.onMessage(C0(), pm("/balance", 101)).msgs[0].text, /\nПоповнити: картка 1234 5678 1234 5678$/);
+  // ще не грав і не поповнював
+  assert.equal(core.onMessage(C0({ tg: { chats: { ...chats, p5: { id: 105 } } } }), pm("/balance", 105)).msgs[0].text, "💰 Баланс: 0 грн");
+});
+test("/topup: баланс і посилання на банку; без реквізитів — підказка", () => {
+  const data = fixture(); data.settings.bank = "https://send.monobank.ua/jar/abc";
+  assert.equal(core.onMessage(C0({ data }), pm("/topup", 103)).msgs[0].text, "💰 Баланс: 0 грн\nПоповнити: https://send.monobank.ua/jar/abc\nЩойно організатор зарахує поповнення, я напишу 🙂");
+  const d2 = fixture(); delete d2.settings.card;
+  assert.match(core.onMessage(C0({ data: d2 }), pm("/topup", 101)).msgs[0].text, /^💰 Баланс: -81 грн\nРеквізити для поповнення ще не вказані/);
+  assert.match(core.onMessage(C0(), pm("/topup", 999)).msgs[0].text, /Я тебе ще не знаю/);
 });
 test("/stop відключає; невідома команда — підказка з /weather", () => {
   assert.deepEqual(core.onMessage(C0(), pm("/stop", 102)).ops, [{ op: "unlink", pid: "p2" }]);
@@ -90,19 +104,61 @@ test("не приватні чати й повідомлення без текс
   assert.deepEqual(core.onMessage(C0(), { text: "/status", chat: { id: 1, type: "group" } }), { msgs: [], ops: [] });
   assert.deepEqual(core.onMessage(C0(), { chat: { id: 1, type: "private" } }), { msgs: [], ops: [] });
 });
-test("подяка після оплати — один раз", () => {
-  const data = fixture(); data.games[0].paid = ["p1", "p3"];
-  let C = C0({ data });
+test("подяка за поповнення — один раз; кілька нових — одним повідомленням; відʼємні, давні й без бота — без подяки", () => {
+  const data = fixture();
+  data.players[0].top = [{ id: "t1", d: "2026-11-10", a: 50 }, { id: "t2", d: "2026-11-11", a: 50, n: "Monobank" }];
+  data.players[1].top = [{ id: "t3", d: "2026-11-10", a: -20, n: "виправлення" }, { id: "t4", d: "2026-10-01", a: 10 }, { id: "t5", d: "2026-11-11", a: 30 }];
+  data.players[3].top = [{ id: "t6", d: "2026-11-11", a: 81 }]; // Гліб без бота
+  const C = C0({ data });
   const r = core.thanks(C);
-  assert.deepEqual(r.msgs.map((m) => m.pid).sort(), ["p1", "p3"]);
-  assert.deepEqual(r.msgs[0].ops.map((o) => o.op), ["thx"]);
+  assert.deepEqual(r.msgs.map((m) => m.pid), ["p1", "p2"]);
+  assert.equal(r.msgs[0].text, "✅ Аня, зараховано 100 грн, баланс 19 грн. Дякуємо, до пʼятниці ⚽");
+  assert.deepEqual(r.msgs[0].ops.map((o) => [o.op, o.gid, o.pid]), [["thx", "t1", "p1"], ["thx", "t2", "p1"]]);
+  // Борис і після поповнення в мінусі (−81 − 20 + 10 + 30): до подяки дописано, куди поповнити
+  assert.equal(r.msgs[1].text, "✅ Борис, зараховано 30 грн, баланс -61 грн. Дякуємо, до пʼятниці ⚽\nкартка 1234 5678 1234 5678");
+  assert.deepEqual(r.msgs[1].ops.map((o) => o.gid), ["t5"]);
   const tg = core.applyOps(C.tg, r.msgs.flatMap((m) => m.ops), data, C.T.date);
+  assert.ok(tg.sent.t1.p1.thx && tg.sent.t5.p2.thx, "прапорці поповнень не прибираються як «зниклі ігри»");
   assert.equal(core.thanks(C0({ data, tg })).msgs.length, 0);
+  // нове поповнення — нова подяка
+  data.players[0].top.push({ id: "t7", d: "2026-11-11", a: 81 });
+  const again = core.thanks(C0({ data, tg }));
+  assert.equal(again.msgs.length, 1);
+  assert.match(again.msgs[0].text, /^✅ Аня, зараховано 81 грн, баланс 100 грн/);
+  // поповнення видалили з data.json — прапорець прибирається
+  data.players[0].top = [];
+  assert.ok(!core.applyOps(tg, [], data, C.T.date).sent.t1);
+});
+test("баланс: організатор платить, гості ні; скасовані, заплановані й ігри до payFrom не списуються; знімок ціни; відʼємні поповнення; paid ігнорується", () => {
+  const S = { price: 100, payFrom: "2026-11-01", org: "p1" };
+  const data = {
+    players: [{ id: "p1", name: "Орг" }, { id: "p2", name: "Б", top: [{ id: "a", d: "2026-11-05", a: 200 }, { id: "b", d: "2026-11-06", a: -50, n: "помилка" }, { id: "c", d: "кривий", a: 5 }, { id: "d", d: "2026-11-07", a: "x" }] }],
+    games: [
+      { id: "g0", date: "2026-10-30", y: ["p1"], b: ["p2"], gy: 3, gb: 2, sy: 1, sb: 0 }, // до початку обліку
+      { id: "g1", date: "2026-11-06", y: ["p1"], b: ["p2"], gy: 3, gb: 2, sy: 1, sb: 0, pr: 81, paid: ["p1", "p2"] }, // знімок ціни
+      { id: "g2", date: "2026-11-13", y: ["p1"], b: ["p2"], gy: 0, gb: 0, sy: 2, sb: 2 }, // без pr — поточна ціна
+      { id: "g3", date: "2026-11-20", y: ["p1"], b: ["p2"], gy: 0, gb: 0, sy: 2, sb: 2, x: true }, // скасована
+      { id: "g4", date: "2026-11-27", c: ["p1", "p2"], y: [], b: [], gy: 0, gb: 0 }, // запланована
+    ],
+  };
+  assert.equal(core.BAL.balance(data, S, "p1"), -181, "організатор теж платить");
+  assert.equal(core.BAL.balance(data, S, "p2"), 200 - 50 - 81 - 100);
+  const I = core.BAL.info(data, S, "p2");
+  // того ж дня поповнення йде перед списанням; некоректні записи відкидаються
+  assert.deepEqual(I.hist.map((e) => [e.k, e.id, e.a, e.b]), [["top", "a", 200, 200], ["top", "b", -50, 150], ["game", "g1", -81, 69], ["game", "g2", -100, -31]]);
+  assert.deepEqual(I.lastTop, { k: "top", id: "b", d: "2026-11-06", a: -50, n: "помилка", b: 150 });
+  assert.deepEqual(I.lastGame, { id: "g2", d: "2026-11-13", a: 100 });
+  assert.equal(core.BAL.balance(data, { ...S, payFrom: "" }, "p2"), 150, "порожній payFrom — облік вимкнено, лише поповнення");
+  assert.equal(core.BAL.balance(data, S, "p9"), 0);
+  assert.equal(core.BAL.fmt(-30.5), "-30,5");
+  assert.equal(core.BAL.fmt(0.1 + 0.2), "0,3");
 });
 test("нагадування за розкладом: не двічі за слот, повтор через every", () => {
   let C = C0();
   let r = core.reminders(C);
-  assert.deepEqual(r.msgs.map((m) => m.pid).sort(), ["p1", "p2"]); // p3 оплатив, p4 без бота
+  assert.deepEqual(r.msgs.map((m) => m.pid).sort(), ["p1", "p2"]); // p3 з балансом 0, p4 без бота
+  assert.equal(r.msgs[0].text, "👋 Аня, баланс у мінусі (-81 грн), поповни: картка 1234 5678 1234 5678\nЯк зарахують, я сам скажу «дякую» 😉");
+  assert.deepEqual(r.msgs[0].ops, [{ op: "r", gid: "g1", pid: "p1", key: "2026-11-11 12:00" }]);
   assert.deepEqual(r.ops, [{ op: "slots", keys: ["2026-11-11 12:00"] }]);
   let tg = core.applyOps(C.tg, [...r.ops, ...r.msgs.flatMap((m) => m.ops)], C.data, C.T.date);
   assert.equal(core.reminders(C0({ tg, now: new Date("2026-11-11T10:40:00Z") })).msgs.length, 0, "той самий слот");
@@ -117,6 +173,21 @@ test("нагадування вручну: одному або всім, missing
   assert.equal(r.msgs[0].ops[0].key, "2026-11-12 manual");
   const one = core.reminders(C0(), { manual: true, player: "p4" });
   assert.equal(one.msgs.length, 0); assert.deepEqual(one.missing, ["Гліб"]);
+  assert.equal(core.reminders(C0(), { manual: true, player: "p3" }).msgs.length, 0, "баланс 0 — не нагадуємо");
+});
+test("нагадування: організатор теж; не більше max на гру; нова гра в мінусі — лічильник знову; поповнив — тиша", () => {
+  const data = fixture(); data.settings.org = "p1"; data.settings.remind.every = 1; data.settings.remind.max = 2;
+  const day = (d) => new Date(`2026-11-${d}T10:05:00Z`);
+  let tg = { chats };
+  const run = (now) => { const C = C0({ data, tg, now }); const r = core.reminders(C); tg = core.applyOps(C.tg, [...r.ops, ...r.msgs.flatMap((m) => m.ops)], data, C.T.date); return r.msgs.map((m) => m.pid).sort(); };
+  assert.deepEqual(run(day(11)), ["p1", "p2"], "організатор у мінусі теж отримує");
+  assert.deepEqual(run(day(12)), ["p1", "p2"]);
+  assert.deepEqual(run(day(13)), [], "max = 2 на гру");
+  // зіграли ще одну гру, обидва досі в мінусі; Борис поповнив
+  data.games[1] = { id: "g2", date: "2026-11-13", y: ["p1"], b: ["p2"], gy: 0, gb: 0, sy: 1, sb: 1 };
+  data.players[1].top = [{ id: "t1", d: "2026-11-14", a: 200 }];
+  assert.deepEqual(run(day(14)), ["p1"], "нова гра — знову; Борис у плюсі (38)");
+  assert.match(core.reminders(C0({ data, now: day(14) }), { manual: true }).msgs[0].text, /Аня, баланс у мінусі \(-162 грн\)/);
 });
 test("gather/cancel — лише гравцям цієї гри", () => {
   for (const kind of ["gather", "cancel"]) {
@@ -142,9 +213,19 @@ test("старі налаштування без нових полів прац�
   assert.equal(C.S.time, "21:00");
   assert.equal(core.reminders(C).msgs.length, 2);
 });
-test("worker/src/wx.js збігається з блоком /*WX*/ в index.html (інакше: node worker/sync-wx.mjs)", () => {
-  const wx = fs.readFileSync(path.join(dir, "..", "src", "wx.js"), "utf8");
-  assert.equal(wx.match(/\/\*WX\*\/[\s\S]*?\/\*\/WX\*\//)[0], HTML.match(/\/\*WX\*\/[\s\S]*?\/\*\/WX\*\//)[0]);
+for (const [tag, file] of [["WX", "wx.js"], ["BAL", "bal.js"]]) {
+  test(`worker/src/${file} збігається з блоком /*${tag}*/ в index.html (інакше: node worker/sync.mjs)`, () => {
+    const re = new RegExp("/\\*" + tag + "\\*/[\\s\\S]*?/\\*/" + tag + "\\*/");
+    const copy = fs.readFileSync(path.join(dir, "..", "src", file), "utf8").match(re);
+    assert.ok(copy, `у src/${file} немає блоку`);
+    assert.equal(copy[0], HTML.match(re)[0]);
+  });
+}
+test("баланс на сайті й у боті — той самий код: блок BAL з index.html дає ті самі числа", () => {
+  const src = HTML.match(/\/\*BAL\*\/[\s\S]*?\/\*\/BAL\*\//)[0];
+  const SITE = new Function("return (" + src + ")();")();
+  const data = fixture(); data.games[0].pr = 70; data.players[0].top = [{ id: "x", d: "2026-11-06", a: 33.3 }];
+  for (const p of data.players) assert.deepEqual(SITE.info(data, data.settings, p.id), core.BAL.info(data, data.settings, p.id));
 });
 
 // ---------- index.js з моками ----------
@@ -206,14 +287,14 @@ test("webhook: /start одразу 200, далі підключення й за�
   assert.equal(tgState(w).chats.p5.id, 505);
   assert.deepEqual(w.commits, [{ message: "Бот: підключено Дана", files: ["tg.json"] }]);
 });
-test("webhook: /status не пише tg.json; /weather при помилці Open-Meteo відповідає", async () => {
+test("webhook: /balance не пише tg.json; /weather при помилці Open-Meteo відповідає", async () => {
   const w = mockWorld(), c = ctxMock();
   const h = { "X-Telegram-Bot-Api-Secret-Token": SECRET };
-  await worker.fetch(req("/tg", { method: "POST", headers: h, body: JSON.stringify({ message: pm("/status", 102) }) }), env, c);
+  await worker.fetch(req("/tg", { method: "POST", headers: h, body: JSON.stringify({ message: pm("/balance", 102) }) }), env, c);
   await worker.fetch(req("/tg", { method: "POST", headers: h, body: JSON.stringify({ message: pm("/weather", 9999) }) }), env, c);
   await quiet(() => c.done());
   assert.equal(w.attempts.length, 0);
-  assert.match(w.sent.find((m) => m.chat_id === 102).text, /Борис, не оплачено/);
+  assert.match(w.sent.find((m) => m.chat_id === 102).text, /^💰 Баланс: -81 грн/);
   assert.match(w.sent.find((m) => m.chat_id === 9999).text, /недоступний/);
   assert.equal(w.om, 1);
 });
@@ -255,13 +336,15 @@ test("/notify: без токена 401, без права запису 403, CORS
   assert.equal(r.status, 403);
 });
 test("/notify thanks / remind / gather / cancel", async () => {
-  const data = fixture(); data.games[0].paid = ["p1", "p3"];
+  const data = fixture();
+  data.players[0].top = [{ id: "t9", d: "2026-11-10", a: 81 }]; data.players[2].top.push({ id: "t8", d: "2026-11-10", a: 10 });
   const w = mockWorld({ data });
   const call = async (b) => { const r = await worker.fetch(req("/notify", { method: "POST", headers: { Origin: "https://stock3.github.io", Authorization: "Bearer owner-token" }, body: JSON.stringify(b) }), env, ctxMock()); return { status: r.status, j: await r.json() }; };
   await quiet(async () => {
     let r = await call({ mode: "thanks" });
     assert.deepEqual(r.j.sent.sort(), ["Аня", "Вова"]);
-    assert.equal(tgState(w).sent.g1.p1.thx > "", true);
+    assert.equal(tgState(w).sent.t9.p1.thx > "", true);
+    assert.equal(w.commits.at(-1).message, "Бот: подяки за поповнення");
     r = await call({ mode: "thanks" });
     assert.deepEqual(r.j.sent, [], "повторно не дякує");
     r = await call({ mode: "remind", player: "" });
@@ -298,13 +381,14 @@ test("/notify unlink: потрібен токен; привʼязка приби
 });
 test("cron: нагадування за розкладом один раз за слот", async () => {
   const data = fixture(); data.settings.remind.times = ["00:00"];
+  data.players[2].top.push({ id: "t8", d: "2026-11-10", a: 5 });
   // підсумок гри g1 уже надіслано — тут перевіряємо лише нагадування й подяки
-  const w = mockWorld({ data, tg: { chats, sent: { g1: { p1: { pg: "t", r: [] }, p2: { pg: "t", r: [] } } } } });
+  const w = mockWorld({ data, tg: { chats, sent: { g1: { p1: { pg: "t", r: [] }, p2: { pg: "t", r: [] }, p3: { pg: "t", r: [] } } } } });
   for (let i = 0; i < 2; i++) { const c = ctxMock(); await quiet(async () => { await worker.scheduled({}, env, c); await c.done(); }); }
-  // нагадування Ані й Борису + подяка-страховка Вові (оплату позначено, подяки ще не було); другий запуск — нічого
+  // нагадування Ані й Борису + подяка-страховка Вові (поповнення внесено, подяки ще не було); другий запуск — нічого
   assert.deepEqual(w.sent.map((m) => m.chat_id).sort(), [101, 102, 103]);
-  assert.match(w.sent.find((m) => m.chat_id === 103).text, /Вова/);
-  assert.deepEqual(w.commits, [{ message: "Бот: подяки; нагадування", files: ["tg.json"] }]);
+  assert.match(w.sent.find((m) => m.chat_id === 103).text, /Вова, .*зараховано 5 грн, баланс 5 грн\./);
+  assert.deepEqual(w.commits, [{ message: "Бот: подяки за поповнення; нагадування", files: ["tg.json"] }]);
 });
 test("/setup: ключ, webhook з секретом, команди; /health", async () => {
   const w = mockWorld();
@@ -317,7 +401,7 @@ test("/setup: ключ, webhook з секретом, команди; /health", a
   const sw = w.tgCalls.find((x) => x.method === "setWebhook").body;
   assert.deepEqual(sw, { url: "https://bot.shtuchka.workers.dev/tg", secret_token: SECRET, allowed_updates: ["message", "callback_query"], drop_pending_updates: false });
   // /poll і /endpoll — лише для організатора, у публічному меню їх немає
-  assert.deepEqual(w.tgCalls.find((x) => x.method === "setMyCommands").body.commands.map((c) => c.command), ["who", "in", "out", "status", "weather", "stop"]);
+  assert.deepEqual(w.tgCalls.find((x) => x.method === "setMyCommands").body.commands.map((c) => c.command), ["who", "in", "out", "balance", "topup", "weather", "stop"]);
   const h = await worker.fetch(req("/health"), env, ctxMock());
   assert.equal(await h.text(), "ok");
   assert.equal((await worker.fetch(req("/nope"), env, ctxMock())).status, 404);

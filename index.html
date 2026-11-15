@@ -256,23 +256,22 @@ a.more:hover{text-decoration:underline}
 .warn{color:var(--loss);font-size:12px}
 .two{display:grid;grid-template-columns:1fr 1fr;gap:10px}
 
-/* payments */
-.cardbox{display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;background:var(--sunk);border-radius:12px;padding:12px 14px}
-.cardbox b{display:block;font-family:var(--f-display);font-size:22px;font-weight:500;letter-spacing:.04em}
+/* баланс */
 .debt{display:flex;justify-content:space-between;align-items:center;gap:10px;padding:9px 0;border-bottom:1px solid var(--line)}
 .debt:last-child{border-bottom:0}
 .debt small{display:block;color:var(--muted);font-size:12px}
 .debt .sum{font-family:var(--f-display);font-size:20px;color:var(--loss);white-space:nowrap}
-.pgame{padding:12px 0;border-top:1px solid var(--line);display:flex;flex-direction:column;gap:8px}
-.pgame .row{align-items:baseline}
-.pchips{display:flex;flex-wrap:wrap;gap:6px}
-.pchip{border:1px solid var(--line);border-radius:99px;padding:4px 10px;font-size:13px;font-weight:500;background:var(--surface);color:var(--ink);white-space:nowrap}
-.pchip.ok{background:var(--win);border-color:var(--win);color:#fff}
-.pchip.no{border-style:dashed;color:var(--muted)}
-button.pchip.chg{box-shadow:0 0 0 2px var(--yel)}
-.savebar{position:sticky;bottom:calc(10px + env(safe-area-inset-bottom,0px));display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;background:var(--btn);color:var(--btn-ink);border-radius:12px;padding:10px 12px;z-index:5}
-.savebar .btn{background:var(--btn-ink);color:var(--btn)}
-.savebar .btn.ghost{background:transparent;color:var(--btn-ink);border-color:var(--btn-ink)}
+.debt .sum.ok{color:var(--ink)}
+.balrow{border-bottom:1px solid var(--line);padding:9px 0}
+.balrow:last-child{border-bottom:0}
+.balrow .debt{border-bottom:0;padding:0}
+.balacts{display:flex;gap:6px;flex-wrap:wrap;margin-top:8px}
+.topform{display:grid;grid-template-columns:110px 150px 1fr auto;gap:8px;align-items:end;margin-top:10px;background:var(--sunk);border-radius:10px;padding:10px}
+.topform .field input{background:var(--surface)}
+.hist{margin-top:10px;font-size:13px}
+.hist div{display:flex;justify-content:space-between;gap:10px;padding:5px 0;border-top:1px dashed var(--line)}
+.hist div>span:last-child{white-space:nowrap;text-align:right}
+@media (max-width:560px){.topform{grid-template-columns:1fr 1fr}.topform .field:nth-child(3),.topform>span{grid-column:1/-1}}
 .tgok{color:var(--win);font-size:12px;font-weight:600;white-space:nowrap}
 .tgno{color:var(--muted);font-size:12px;white-space:nowrap}
 .preview{white-space:pre-wrap;background:var(--sunk);border-radius:10px;padding:10px 12px;font-size:14px;margin:0}
@@ -313,14 +312,14 @@ var DEF = /*DEF*/{
  "price":81,"card":"","cardName":"","bank":"","payFrom":"","org":"","bot":"","worker":"https://bot.shtuchka.workers.dev","testMode":false,
  "remind":{"on":true,"mode":"after","after":1,"days":[1,3],"times":["12:00"],"quiet":{"from":"22:00","to":"09:00"},"every":2,"max":3},
  "thanks":[
-  "✅ {name}, {sum} грн отримано! {date}, {score} — {verdict}. Дякуємо за гру, до пʼятниці ⚽",
-  "💸 Є контакт! {name}, оплату за {debt} зараховано. {verdict}. Бухгалтерія задоволена 🧾",
-  "🙌 {name}, кошти дійшли, ти в списку чесних людей. {date}: {score}, {verdict}. До зустрічі на полі!"
+  "✅ {name}, зараховано {amount} грн, баланс {balance} грн. Дякуємо, до пʼятниці ⚽",
+  "💸 Є контакт! {name}, зараховано {amount} грн, баланс {balance} грн. Бухгалтерія задоволена 🧾",
+  "🙌 {name}, кошти дійшли: зараховано {amount} грн, баланс {balance} грн. До зустрічі на полі!"
  ],
  "reminders":[
-  "👋 {name}, нагадую про оплату за {debt}. Разом {sum} грн.\nКартка: {card} {cardName}\nЯк скинеш, я сам скажу «дякую» 😉",
-  "⚽ {name}, мʼяч круглий, а борг — {sum} грн 😅\nЗа {debt}.\nКартка: {card} {cardName}",
-  "🧾 {name}, на звʼязку бухгалтерія Пʼятниці 5×5. Не бачу оплати за {debt}. {sum} грн на {card} — і ти знову чистий 🙏"
+  "👋 {name}, баланс у мінусі ({balance} грн), поповни: {jar}\nЯк зарахують, я сам скажу «дякую» 😉",
+  "⚽ {name}, мʼяч круглий, а баланс у мінусі ({balance} грн) 😅 Поповни: {jar}",
+  "🧾 {name}, на звʼязку бухгалтерія Пʼятниці 5×5: баланс у мінусі ({balance} грн), поповни: {jar} 🙏"
  ],
  "time":"21:00","place":"штучне поле Буковини",
  "city":"Чернівці","lat":48.29,"lon":25.94,"rainWarn":90,"sinoptik":"https://sinoptik.ua/pohoda/chernivtsi","meteo":"https://meteo.ua/ua/91/chernovtsyi",
@@ -334,26 +333,22 @@ var DEF = /*DEF*/{
   "❌ {name}, збір скасовано: на {date} не набралось 10 людей. Мʼяч сумує, але тримається. До наступної гри ⚽",
   "🫠 {name}, {day}, {date} — без футболу: не вистачило людей. Бережи ноги для наступної гри!"
  ],
- "hello":"Привіт, {name}! Я бот Пʼятниці 5×5 ⚽ Скажу «дякую», коли оплату отримано, і нагадаю, якщо забудеш. Перевірити борги: /status",
+ "hello":"Привіт, {name}! Я бот Пʼятниці 5×5 ⚽ Після гри напишу, скільки списано й скільки лишилось на балансі, подякую за поповнення й нагадаю, якщо баланс піде в мінус. Баланс: /balance, поповнити: /topup",
  "verdicts":{
   "w":["ще й з перемогою 💪","перемога смакує ще краще","три очки в кишені"],
   "l":["поразка, але оплата — це вже перемога","рахунок не наш, зате совість чиста"],
   "d":["нічия на полі, перемога в бухгалтерії","нічия, але гроші не нічия"]
  },
- "prepaid":[
-  "✅ {name}, {sum} грн за гру {date} отримано наперед! Ось це організованість 👏 До зустрічі на полі ⚽",
-  "💸 {name}, оплату за {debt} зараховано ще до гри. Бухгалтерія аплодує стоячи 🧾"
- ],
  "postW":[
-  "🏆 {name}, класна гра — перемога {score}! За гру {date}: {sum} грн на {card} {cardName}\n{bank}",
-  "💪 Три очки наші, {score}! {name}, за гру {sum} грн — картка {card} {cardName}\n{bank}"
+  "🏆 {name}, класна гра — перемога {score}!\nСписано {charge} грн за гру {date} · баланс {balance} грн\n{jar}",
+  "💪 Три очки наші, {score}! {name}, списано {charge} грн за гру {date} · баланс {balance} грн\n{jar}"
  ],
  "postL":[
-  "💪 {name}, сьогодні не пощастило, {score}, наступного разу наша! За гру {date}: {sum} грн на {card} {cardName}\n{bank}",
-  "😤 {score} — рахунок не наш, але реванш близько. {name}, за гру {sum} грн — картка {card} {cardName}\n{bank}"
+  "💪 {name}, сьогодні не пощастило, {score}, наступного разу наша!\nСписано {charge} грн за гру {date} · баланс {balance} грн\n{jar}",
+  "😤 {score} — рахунок не наш, але реванш близько. {name}, списано {charge} грн за гру {date} · баланс {balance} грн\n{jar}"
  ],
  "postD":[
-  "🤝 {name}, нічия {score} — нікому не прикро! За гру {date}: {sum} грн на {card} {cardName}\n{bank}"
+  "🤝 {name}, нічия {score} — нікому не прикро!\nСписано {charge} грн за гру {date} · баланс {balance} грн\n{jar}"
  ],
  "poll":{"auto":false,"day":4,"time":"11:00","need":10},
  "pollInvite":[
@@ -479,7 +474,45 @@ var WX = (/*WX*/function(){
   }
   return {url:url,build:build,text:text,line:line,head:head,dayLine:dayLine,gameHead:gameHead,verdictText:verdictText,modelLine:modelLine,icon:icon};
 }/*/WX*/)();
-var WXS = {key:"",at:0,data:null,err:false,loading:false,upd:""};
+/* Баланс гравців: поповнення (players[].top) мінус списання за зіграні ігри. Бот бере копію цього блоку (worker/src/bal.js,
+   оновлює node worker/sync.mjs), тож тут лише ES5 без залежностей від решти сторінки — так сайт і бот рахують однаково. */
+var BAL = (/*BAL*/function(){
+  /* x — скасована гра; без рахунку — запланована */
+  function played(g){return !!g&&!g.x&&g.sy!=null&&g.sb!=null&&g.sy!==""&&g.sb!=="";}
+  function isNum(x){return x!=null&&x!==""&&isFinite(+x);}
+  function r2(n){return Math.round(n*100)/100;}
+  /* ціна гри: знімок g.pr (ставиться, коли вносять рахунок), інакше поточна settings.price */
+  function charge(g,s){return isNum(g&&g.pr)?+g.pr:isNum(s&&s.price)?+s.price:0;}
+  /* за гру списується: зіграна, не скасована, з датою не раніше початку обліку (порожній payFrom — облік вимкнено) */
+  function charged(g,s){return !!(s&&s.payFrom)&&played(g)&&g.date>=s.payFrom;}
+  /* хто платить: усі гравці команд, і організатор теж; гості (gy/gb) — ні */
+  function inGame(g,pid){return (g.y||[]).indexOf(pid)>=0||(g.b||[]).indexOf(pid)>=0;}
+  function tops(p){return (p&&Array.isArray(p.top)?p.top:[]).filter(function(t){return t&&isNum(t.a)&&/^\d{4}-\d{2}-\d{2}$/.test(String(t.d||""));});}
+  function player(data,pid){var ps=(data&&data.players)||[];for(var i=0;i<ps.length;i++)if(ps[i].id===pid)return ps[i];return null;}
+  /* історія гравця від старого до нового: {k:"top",id,d,a,n?} і {k:"game",id,d,a:−ціна}; b — баланс після запису.
+     Того ж дня поповнення йде перед списанням. */
+  function history(data,s,pid){
+    var L=[];
+    tops(player(data,pid)).forEach(function(t,i){L.push({k:"top",id:t.id||"",d:t.d,a:+t.a,n:t.n||"",i:i});});
+    ((data&&data.games)||[]).forEach(function(g,i){if(charged(g,s)&&inGame(g,pid))L.push({k:"game",id:g.id,d:g.date,a:-charge(g,s),i:i});});
+    L.sort(function(x,y){return x.d<y.d?-1:x.d>y.d?1:x.k!==y.k?(x.k==="top"?-1:1):x.i-y.i;});
+    var b=0; L.forEach(function(e){b=r2(b+e.a);e.b=b;delete e.i;});
+    return L;
+  }
+  /* підсумок гравця: bal — баланс; lastTop — останнє поповнення; lastGame — остання списана гра {id,d,a>0} */
+  function info(data,s,pid){
+    var h=history(data,s,pid), lt=null, lg=null;
+    h.forEach(function(e){if(e.k==="top")lt=e;else lg=e;});
+    return {bal:h.length?h[h.length-1].b:0,hist:h,lastTop:lt,lastGame:lg?{id:lg.id,d:lg.d,a:-lg.a}:null};
+  }
+  function balance(data,s,pid){return info(data,s,pid).bal;}
+  /* 81 → "81", -40.5 → "-40,5" */
+  function fmt(n){var v=r2(+n||0);return String(v).replace(".",",");}
+  /* старі тексти моделі «борг за гру» (до балансу) не підходять — замість них стандартні */
+  function legacy(t){return /\{(debt|sum|card|cardName|bank)\}|\/status\b/.test(String(t||""));}
+  return {played:played,charge:charge,charged:charged,inGame:inGame,tops:tops,history:history,info:info,balance:balance,fmt:fmt,legacy:legacy};
+}/*/BAL*/)();
+var WXS ={key:"",at:0,data:null,err:false,loading:false,upd:""};
 var TG = {chats:{}};
 var ui = {season:null, tab:"rating", sort:{k:"pct",d:-1}, open:null, gen:{sel:[],guests:0,pick:0,res:null}, form:null, players:null, login:null, profile:null, pedit:null, manage:false, inApp:false};
 var editor=false, busy=false, toastT=null, sha=null, loaded=false;
@@ -592,7 +625,11 @@ function bdayInfo(bd){
 function hasNum(p){return p.num!=null&&p.num!=="";}
 /* ---------- payments ---------- */
 function SET(){var s=S.settings||{},o={};Object.keys(DEF).forEach(function(k){o[k]=s[k]!=null?s[k]:DEF[k];});o.remind=normRemind(s.remind);
-  o.poll=Object.assign({},DEF.poll,s.poll||{}); o.say=Object.assign({},DEF.say,s.say||{}); return o;}
+  o.poll=Object.assign({},DEF.poll,s.poll||{}); o.say=Object.assign({},DEF.say,s.say||{});
+  /* старі тексти моделі «борг за гру» ({debt}, {card}, /status…) замінюються стандартними — так само в worker/src/core.js */
+  BAL_TEXTS.forEach(function(k){if([].concat(o[k]==null?[]:o[k]).some(BAL.legacy))o[k]=JSON.parse(JSON.stringify(DEF[k]));});
+  return o;}
+var BAL_TEXTS=["thanks","reminders","postW","postL","postD","hello"];
 /* черга запрошень в опитуванні: prio (без prio — після, за імʼям); так само в worker/src/poll.js */
 function hasPrio(p){return p.prio!=null&&p.prio!==""&&isFinite(+p.prio);}
 function byPrio(a,b){if(hasPrio(a)!==hasPrio(b))return hasPrio(a)?-1:1; if(hasPrio(a)&&+a.prio!==+b.prio)return +a.prio-+b.prio; return String(a.name).localeCompare(String(b.name),"uk");}
@@ -608,16 +645,12 @@ function normRemind(src){
   r.quiet=r.quiet&&typeof r.quiet==="object"?{from:hm(r.quiet.from),to:hm(r.quiet.to)}:{from:"",to:""};
   return r;
 }
-function tracked(g){var s=SET();return played(g)&&!!s.payFrom&&g.date>=s.payFrom;}
-function payers(g){var o=SET().org;return (g.y||[]).concat(g.b||[]).filter(function(id){return id!==o;});}
-function paidOf(g){return ui.paydraft&&ui.paydraft[g.id]?ui.paydraft[g.id]:(g.paid||[]);}
-function debts(){
-  var m={}; sortedGames(S.games.filter(tracked)).forEach(function(g){var pd=paidOf(g);payers(g).forEach(function(id){if(pd.indexOf(id)<0)(m[id]||(m[id]=[])).push(g);});});
-  return m;
-}
+/* баланс — спільний з ботом блок BAL (games[].paid більше не враховується) */
+function balOf(id){return BAL.info(S,SET(),id);}
 function fmtCard(c){var d=String(c||"").replace(/\D/g,"");return d.length===16?d.replace(/(\d{4})(?=\d)/g,"$1 "):String(c||"");}
+/* куди поповнювати: банка (settings.bank), інакше картка — так само, як jarText у боті */
+function jarText(s){return s.bank?s.bank:s.card?"картка "+fmtCard(s.card)+(s.cardName?" ("+s.cardName+")":""):"";}
 function dmon(d){var p=d.split("-");return +p[2]+" "+MONG[+p[1]-1];}
-function debtPhrase(list){var ds=list.map(function(g){return dmon(g.date);});return (ds.length>1?"ігри ":"гру ")+(ds.length>1?ds.slice(0,-1).join(", ")+" і "+ds[ds.length-1]:ds[0]);}
 function fillT(t,v){return String(t).replace(/\{(\w+)\}/g,function(m,k){return v[k]!=null?v[k]:m;}).replace(/[ \t]+\n/g,"\n").replace(/ {2,}/g," ").trim();}
 function tgLink(p){return p&&p.tg?"https://t.me/"+encodeURIComponent(p.tg):"";}
 function botLink(id){var b=SET().bot;return b?"https://t.me/"+encodeURIComponent(b)+"?start="+encodeURIComponent(id):"";}
@@ -672,7 +705,7 @@ function save(build,okMsg,commitMsg,gid){
     if(!r.ok){return r.text().then(function(){throw new Error(ghError(r));});}
     return r.json();
   }).then(function(j){
-    sha=j.content&&j.content.sha; S=next; busy=false; ui.form=null; ui.players=null; ui.pedit=null; ui.paydraft=null; ui.sets=null; render();
+    sha=j.content&&j.content.sha; S=next; busy=false; ui.form=null; ui.players=null; ui.pedit=null; ui.topup=null; ui.sets=null; render();
     toast((okMsg||"Збережено")+". Сайт для всіх оновиться за 1–2 хв");
     botSync(okMsg,gid);
   }).catch(function(e){busy=false; render(); toast(e.message&&e.message.length>8?e.message:"Немає звʼязку з GitHub. Спробуйте ще раз");});
@@ -824,7 +857,7 @@ function notify(body,quiet){
     });
   }).catch(function(){say("Бот недоступний. Перевірте адресу бота в Налаштуваннях");return null;});
 }
-/* після кожного збереження: бот звіряє опитування зі складом, надсилає підсумок гри з оплатою й подяки */
+/* після кожного збереження: бот звіряє опитування зі складом, надсилає підсумок гри зі списанням і подяки за поповнення */
 function botSync(okMsg,gid){
   if(!SET().worker)return;
   notify(gid?{mode:"sync",game:gid}:{mode:"sync"},true).then(function(j){
@@ -974,11 +1007,11 @@ function profileView(id){
   var first=null; for(var i=0;i<all.length;i++)if(onTeam(all[i],id)){first=all[i];break;}
   if(first)meta.push('Перша гра: <b>'+fmtLong(first.date)+'</b>');
   var empty=!meta.length&&!p.quote;
-  var st=SET(), dl=debts()[id], payL="";
-  if(st.payFrom)payL='<p class="note" style="margin:8px 0 0">'+(dl?'💸 Не оплачено: <b style="color:var(--loss)">'+debtPhrase(dl)+' · '+dl.length*st.price+' грн</b> <button class="edit" data-tab="pay">До оплати →</button>':'✅ Боргів немає')+'</p>';
+  /* баланс у публічному профілі не показуємо — він лише у вкладці «Баланс» редактора */
+  var st=SET(), payL="";
   if(st.bot){
     var ch=TG.chats&&TG.chats[id];
-    payL+='<p class="note" style="margin:4px 0 0">'+(ch?'🤖 Telegram-бот підключено':'🤖 <a class="more" href="'+esc(botLink(id))+'" target="_blank" rel="noopener">Підключити Telegram-бота</a> — писатиме про оплату')+
+    payL+='<p class="note" style="margin:8px 0 0">'+(ch?'🤖 Telegram-бот підключено':'🤖 <a class="more" href="'+esc(botLink(id))+'" target="_blank" rel="noopener">Підключити Telegram-бота</a> — писатиме про ігри й баланс')+
       (editor&&!ch?' · <button class="edit" data-copy="'+esc(botLink(id))+'">Скопіювати посилання</button>':'')+'</p>';
   }
   var head='<div class="panel pad stack">'+back+
@@ -1081,82 +1114,77 @@ function savePedit(){
   })};},"Профіль збережено","Профіль: "+name);
 }
 
-/* ---------- оплата ---------- */
-/* кого можна позначити оплаченим: зіграна гра — команди (разом з організатором, хоч він і не боржник);
-   запланована — усі відмічені (оплата наперед) */
-function payChips(g){return played(g)?gameIds({y:g.y,b:g.b}):gameIds(g);}
-/* ігри у вкладці «Оплата»: зіграні з початку обліку + заплановані (не скасовані) з людьми */
-function payGames(){var s=SET();return sortedGames(S.games.filter(function(g){return tracked(g)||(!!s.payFrom&&!played(g)&&!g.x&&g.date>=s.payFrom&&gameIds(g).length);})).reverse();}
-function payChanges(){
-  var n=0; if(!ui.paydraft)return 0;
-  S.games.forEach(function(g){var d=ui.paydraft[g.id]; if(!d)return; var o=g.paid||[];
-    payChips(g).forEach(function(id){if((d.indexOf(id)>=0)!==(o.indexOf(id)>=0))n++;});});
-  return n;
-}
-function payView(){
+/* ---------- баланс (лише редактор) ---------- */
+/* Баланс гравця = поповнення (players[].top) − ціна кожної зіграної гри з початку обліку (g.pr ?? settings.price).
+   Рахує спільний з ботом блок BAL. Організатор платить теж, гості — ні. */
+function money(n){var v=BAL.fmt(n);return (+n>0?"+":"")+v;}
+function balRows(){
   var s=SET();
-  if(!s.payFrom)return '<div class="panel pad stack"><h2 class="h">Оплата</h2><p class="note">Облік оплат ще не увімкнено.'+(editor?' Вкажіть дату початку обліку у вкладці «Налаштування».':'')+'</p></div>';
-  var card=s.card?'<div class="cardbox"><div><span class="note">Картка'+(s.cardName?' · '+esc(s.cardName):'')+'</span><b class="num">'+esc(fmtCard(s.card))+'</b></div><button class="btn small" data-copy="'+esc(String(s.card).replace(/\s/g,""))+'">Скопіювати</button></div>':'';
-  var bank=s.bank?'<a class="more" href="'+esc(s.bank)+'" target="_blank" rel="noopener">Оплатити за посиланням →</a>':'';
-  var d=debts(), ids=Object.keys(d).sort(function(a,b){return d[b].length-d[a].length||pname(a).localeCompare(pname(b),"uk");});
-  var canRemind=editor&&!!s.bot;
-  var debtors=ids.length?ids.map(function(id){
-    var ch=TG.chats&&TG.chats[id];
-    return '<div class="debt"><div style="min-width:0"><a class="more" href="#'+esc(id)+'">'+esc(pname(id))+'</a><small>'+debtPhrase(d[id])+'</small></div>'+
-      '<div class="row" style="flex-wrap:nowrap">'+(s.bot?(ch?'<span class="tgok" title="Бот підключено">🤖 є</span>':'<span class="tgno" title="Бот не підключено">🤖 немає</span>'):'')+
-      (canRemind&&ch?'<button class="btn ghost small" data-remind="'+esc(id)+'">Нагадати</button>':'')+'<span class="sum num">'+d[id].length*s.price+'</span></div></div>';
-  }).join(""):'<p class="note">Усі розрахувалися 🎉</p>';
-  var total=0; ids.forEach(function(k){total+=d[k].length*s.price;});
-  var list=payGames(), lim=ui.payAll?list.length:6;
-  var games=list.slice(0,lim).map(function(g){
-    var pd=paidOf(g), pl=played(g), all=payChips(g), py=all.filter(function(id){return id!==s.org;}), o=g.paid||[], f=fmtDate(g.date), ok=py.filter(function(id){return pd.indexOf(id)>=0;}).length;
-    /* організатор не боржник: його чип показуємо лише редактору або коли вже позначено */
-    var shown=all.filter(function(id){return id!==s.org||editor||pd.indexOf(id)>=0;});
-    var chips=shown.map(function(id){
-      var on=pd.indexOf(id)>=0, chg=on!==(o.indexOf(id)>=0), lbl=(on?"✓ ":"")+esc(pname(id))+(id===s.org?" (орг.)":"");
-      return editor?'<button class="pchip '+(on?"ok":"no")+(chg?" chg":"")+'" data-pay="'+g.id+'|'+esc(id)+'" aria-pressed="'+on+'">'+lbl+'</button>':'<span class="pchip '+(on?"ok":"no")+'">'+lbl+'</span>';
-    }).join("");
-    return '<div class="pgame"><div class="row"><span><b>'+f.day+' '+f.mon+'</b> <span class="note">'+(pl?g.sy+':'+g.sb:'заплановано, оплата наперед')+'</span></span><span class="note">Оплатили '+ok+' з '+py.length+(py.length&&ok===py.length?' ✅':'')+'</span></div><div class="pchips">'+chips+'</div></div>';
+  return S.players.map(function(p){var I=balOf(p.id);return {p:p,I:I};})
+    .filter(function(x){return x.p.active!==false||x.I.hist.length;})
+    .sort(function(a,b){return a.I.bal-b.I.bal||a.p.name.localeCompare(b.p.name,"uk");});
+}
+function balView(){
+  if(!editor)return '<div class="panel"><p class="empty">Баланс бачить лише редактор.</p></div>';
+  var s=SET(), canRemind=!!s.bot&&!!s.worker, rows=balRows(), neg=0, negN=0, today=todayStr();
+  rows.forEach(function(x){if(x.I.bal<0){neg+=x.I.bal;negN++;}});
+  var head='<div class="panel pad stack"><div><h2 class="h">Баланс</h2><p class="sub">'+
+    (s.payFrom?'За кожну зіграну гру з '+fmtLong(s.payFrom)+' списується '+esc(BAL.fmt(s.price))+' грн (ціна фіксується, коли вносите рахунок). Організатор платить теж, гості — ні':'Облік ще не увімкнено: вкажіть дату початку обліку в «Налаштуваннях». Поки що баланс — лише сума поповнень')+'</p></div>'+
+    (negN?'<div class="row"><p class="note" style="margin:0">У мінусі: <b class="neg">'+negN+'</b> · разом <b class="neg">'+esc(BAL.fmt(neg))+' грн</b></p>'+
+      (canRemind?'<button class="btn ghost small" data-remind="*">Нагадати всім у мінусі</button>':'')+'</div>':'<p class="note" style="margin:0">Ніхто не в мінусі 🎉</p>')+
+    (jarText(s)?'<p class="note" style="margin:0">Куди поповнювати: '+(s.bank?'<a class="more" href="'+esc(s.bank)+'" target="_blank" rel="noopener">банка</a>':esc(jarText(s)))+'</p>':'')+'</div>';
+  var list=rows.map(function(x){
+    var p=x.p, I=x.I, ch=TG.chats&&TG.chats[p.id], lt=I.lastTop, open=ui.balOpen===p.id, f=ui.topup&&ui.topup.pid===p.id?ui.topup:null;
+    var h='<div class="balrow"><div class="debt"><div style="min-width:0"><a class="more" href="#'+esc(p.id)+'">'+esc(p.name)+'</a>'+(p.id===s.org?' <span class="note">(орг.)</span>':'')+
+      '<small>'+(lt?'Останнє поповнення: '+esc(dmon(lt.d))+', '+esc(money(lt.a))+' грн':'Поповнень ще не було')+'</small></div>'+
+      '<div class="row" style="flex-wrap:nowrap">'+(s.bot?(ch?'<span class="tgok" title="Бот підключено">🤖</span>':'<span class="tgno" title="Бот не підключено">🤖 немає</span>'):'')+
+      '<span class="sum num'+(I.bal<0?'':' ok')+'">'+esc(BAL.fmt(I.bal))+'</span></div></div>'+
+      '<div class="balacts"><button class="btn ghost small" data-act="top-open" data-pid="'+esc(p.id)+'">+ Поповнення</button>'+
+      (I.hist.length?'<button class="btn ghost small" data-act="bal-hist" data-pid="'+esc(p.id)+'" aria-expanded="'+open+'">'+(open?'Сховати історію':'Історія ('+I.hist.length+')')+'</button>':'')+
+      (canRemind&&ch&&I.bal<0?'<button class="btn ghost small" data-remind="'+esc(p.id)+'">Нагадати</button>':'')+'</div>';
+    if(f)h+='<div class="topform"><label class="field">Сума, грн<input type="number" step="any" id="t-a" value="'+esc(f.a)+'" placeholder="'+esc(I.bal<0?BAL.fmt(-I.bal):BAL.fmt(s.price))+'"></label>'+
+      '<label class="field">Дата<input type="date" id="t-d" value="'+esc(f.d||today)+'"></label>'+
+      '<label class="field">Коментар <span class="hint">необовʼязково</span><input type="text" id="t-n" value="'+esc(f.n)+'" maxlength="80" placeholder="напр. Monobank"></label>'+
+      '<span class="row" style="flex-wrap:nowrap"><button class="btn ghost small" data-act="top-cancel">Скасувати</button><button class="btn small" data-act="top-save"'+(busy?" disabled":"")+'>'+(busy?"Зберігаю…":"Зберегти")+'</button></span>'+
+      '<p class="note" style="grid-column:1/-1;margin:0">Відʼємна сума — виправлення помилки. Бот напише гравцю «Зараховано … грн, баланс … грн»</p></div>';
+    if(open)h+='<div class="hist">'+I.hist.slice().reverse().map(function(e){
+      var g=e.k==="game"&&S.games.filter(function(x){return x.id===e.id;})[0];
+      var what=e.k==="top"?'Поповнення'+(e.n?' · '+esc(e.n):''):'Гра '+(g?esc(g.sy+':'+g.sb):'');
+      return '<div><span>'+esc(fmtDate(e.d).day+' '+fmtDate(e.d).mon+' '+fmtDate(e.d).year)+' · '+what+'</span><span><b class="'+(e.a<0?'neg':'pos')+'">'+esc(money(e.a))+'</b> <span class="note">→ '+esc(BAL.fmt(e.b))+'</span></span></div>';
+    }).join("")+'</div>';
+    return h+'</div>';
   }).join("");
-  var more=list.length>6?'<button class="edit" data-act="pay-all">'+(ui.payAll?"Показати менше":"Усі ігри ("+list.length+")")+'</button>':'';
-  var n=payChanges();
-  return '<div class="panel pad stack"><div><h2 class="h">Оплата</h2><p class="sub">'+s.price+' грн з гравця за гру · облік з '+fmtLong(s.payFrom)+'</p></div>'+card+bank+'</div>'+
-    '<div class="panel pad stack"><div class="row"><div><h2 class="h">Не оплатили</h2>'+(total?'<p class="sub">Разом '+total+' грн</p>':'')+'</div>'+
-      (canRemind&&ids.length?'<button class="btn ghost small" data-remind="*">Нагадати всім</button>':'')+'</div><div>'+debtors+'</div></div>'+
-    '<div class="panel pad stack"><div><h2 class="h">Ігри</h2><p class="sub">'+(editor?'Натисніть на гравця, щоб позначити оплату, потім «Зберегти». Заплановану гру можна оплатити наперед':'Зелені вже оплатили')+'</p></div>'+(games||'<p class="note">Ще немає ігор з початку обліку.</p>')+more+'</div>'+
-    (editor&&n?'<div class="savebar"><span>Змін: '+n+'</span><span class="row"><button class="btn ghost small" data-act="pay-cancel">Скасувати</button><button class="btn small" data-act="pay-save"'+(busy?" disabled":"")+'>'+(busy?"Зберігаю…":"Зберегти оплату")+'</button></span></div>':'');
+  return head+'<div class="panel pad stack"><div>'+(list||'<p class="note">Гравців ще немає.</p>')+'</div></div>';
 }
-function togglePay(gid,pid){
-  var g=S.games.filter(function(x){return x.id===gid;})[0]; if(!g)return;
-  ui.paydraft=ui.paydraft||{}; var d=(ui.paydraft[gid]||(g.paid||[])).slice(), i=d.indexOf(pid);
-  if(i>=0)d.splice(i,1); else d.push(pid); ui.paydraft[gid]=d; render();
-}
-function savePay(){
-  if(!ui.paydraft)return; var names=[], dates={}, draft=ui.paydraft;
-  S.games.forEach(function(g){var d=draft[g.id]; if(!d)return; var o=g.paid||[];
-    payChips(g).forEach(function(id){if(d.indexOf(id)>=0&&o.indexOf(id)<0){names.push(pname(id));dates[dmon(g.date)]=1;}});});
-  var msg="Оплата"+(names.length?": "+names.join(", ")+" ("+Object.keys(dates).join(", ")+")":": зміни");
-  /* після збереження бот подякує (botSync у save) */
-  save(function(){return {v:S.v,players:S.players,games:S.games.map(function(g){
-    var d=draft[g.id]; if(!d)return g;
-    var n={}; Object.keys(g).forEach(function(k){n[k]=g[k];});
-    var keep=gameIds(g).filter(function(id){return d.indexOf(id)>=0;});
-    if(keep.length)n.paid=keep; else delete n.paid; return n;
-  })};},"Оплату збережено",msg);
+function topOpen(pid){ui.topup={pid:pid,a:"",d:todayStr(),n:""};render();var el=document.getElementById("t-a");if(el)el.focus();}
+function readTop(){var f=ui.topup;if(!f)return;function v(id){var el=document.getElementById(id);return el?el.value:null;}
+  if(v("t-a")!==null){f.a=v("t-a");f.d=v("t-d");f.n=v("t-n");}}
+function newTopId(){return "t"+Date.now().toString(36)+Math.random().toString(36).slice(2,5);}
+/* поповнення: дописується в players[].top свіжого data.json (save перебудує при конфлікті з ботом) */
+function saveTop(){
+  readTop(); var f=ui.topup; if(!f)return;
+  var a=String(f.a).replace(",",".").trim();
+  if(a===""||!isFinite(+a)||+a===0){toast("Вкажіть суму, напр. 81 (відʼємна — виправлення)");return;}
+  if(!/^\d{4}-\d{2}-\d{2}$/.test(f.d||"")){toast("Вкажіть дату поповнення");return;}
+  var t={id:newTopId(),d:f.d,a:Math.round(+a*100)/100}, n=String(f.n||"").trim(), pid=f.pid, nm=pname(pid);
+  if(n)t.n=n;
+  save(function(){
+    if(!S.players.some(function(p){return p.id===pid;}))throw new Error("Гравця не знайдено");
+    return {v:S.v,games:S.games,players:S.players.map(function(p){
+      if(p.id!==pid)return p;
+      var o={}; Object.keys(p).forEach(function(k){o[k]=p[k];}); o.top=(Array.isArray(p.top)?p.top:[]).concat([t]); return o;
+    })};
+  },"Поповнення збережено","Поповнення: "+nm+" "+(t.a>0?"+":"")+t.a+" грн ("+t.d+")");
 }
 function remindNow(pid){
   notify({mode:"remind",player:pid==="*"?"":pid}).then(function(j){if(j)toast(notifyMsg(j));});
 }
 
 /* ---------- налаштування (редактор) ---------- */
-function sampleVars(kind){
-  var s=SET(), d=debts(), id=Object.keys(d)[0], list=id?d[id]:[];
-  var g=list[list.length-1]||sortedGames(S.games.filter(played)).slice(-1)[0];
-  if(!id&&g)id=payers(g)[0]; if(!list.length&&g)list=[g];
-  var side=g?((g.y||[]).indexOf(id)>=0?"y":"b"):"y", my=g?(side==="y"?+g.sy:+g.sb):0, op=g?(side==="y"?+g.sb:+g.sy):0, r=my>op?"w":my<op?"l":"d";
-  var vd=s.verdicts&&s.verdicts[r]||[""];
-  return {name:id?pname(id):"Гравець",date:g?dmon(g.date):"",score:g?g.sy+":"+g.sb:"",verdict:vd[0],sum:list.length*s.price,debt:list.length?debtPhrase(list):"",
-    card:fmtCard(s.card)||"[картка]",cardName:s.cardName?"("+s.cardName+")":"",bank:s.bank||"",site:location.origin+location.pathname};
+/* приклад підстановок для прев'ю текстів подяки й нагадування (s — налаштування з форми) */
+function sampleVars(s,kind){
+  var rows=balRows(), x=rows[0], p=x?x.p:null, bal=kind==="r"?(x&&x.I.bal<0?x.I.bal:-s.price):(x?x.I.bal+s.price:s.price);
+  return {name:p?p.name:"Гравець",amount:BAL.fmt(s.price),balance:BAL.fmt(bal),jar:bal<0?(jarText(s)||"[банка]"):"",date:dmon(todayStr()),site:location.origin+location.pathname};
 }
 function splitT(v){return String(v||"").split(/\n\s*---\s*\n/).map(function(x){return x.trim();}).filter(Boolean);}
 var WD=["Пн","Вт","Ср","Чт","Пт","Сб","Нд"];
@@ -1177,17 +1205,17 @@ function botPeople(s){
 function settingsView(){
   if(!editor)return '<div class="panel"><p class="empty">Налаштування доступні лише редактору.</p></div>';
   var s=ui.sets||(ui.sets=JSON.parse(JSON.stringify(SET()))), r=s.remind;
-  var orgOpts='<option value="">Ніхто (платять усі)</option>'+S.players.slice().sort(function(a,b){return a.name.localeCompare(b.name,"uk");}).map(function(p){return '<option value="'+esc(p.id)+'"'+(s.org===p.id?" selected":"")+'>'+esc(p.name)+'</option>';}).join("");
+  var orgOpts='<option value="">Не вибрано</option>'+S.players.slice().sort(function(a,b){return a.name.localeCompare(b.name,"uk");}).map(function(p){return '<option value="'+esc(p.id)+'"'+(s.org===p.id?" selected":"")+'>'+esc(p.name)+'</option>';}).join("");
   function ta(id,label,arr,hint,rows){return '<label class="field">'+label+(hint?' <span class="hint">'+hint+'</span>':'')+'<textarea id="'+id+'" rows="'+(rows||8)+'">'+esc(arr.join("\n---\n"))+'</textarea></label>';}
   var pv=ui.preview?'<p class="preview">'+esc(ui.preview)+'</p>':'';
-  return '<div class="panel pad stack"><div><h2 class="h">Оплата</h2><p class="sub">Видно всім на вкладці «Оплата»</p></div>'+
+  return '<div class="panel pad stack"><div><h2 class="h">Оплата</h2><p class="sub">Баланс гравців — у вкладці «Баланс» (бачить лише редактор)</p></div>'+
     '<div class="three"><label class="field">Ціна з гравця, грн<input type="number" min="0" id="s-price" value="'+esc(s.price)+'"></label>'+
     '<label class="field">Облік з дати<input type="date" id="s-from" value="'+esc(s.payFrom)+'"></label>'+
-    '<label class="field">Не платить (організатор)<select id="s-org">'+orgOpts+'</select></label></div>'+
-    '<p class="note">Ігри до дати початку обліку в оплаті не враховуються. Порожня дата вимикає облік.</p>'+
+    '<label class="field">Організатор<select id="s-org">'+orgOpts+'</select></label></div>'+
+    '<p class="note">За кожну зіграну гру з дати початку обліку з балансу кожного гравця команд списується ціна — і в організатора теж; гості не платять. Ціна запамʼятовується в грі, коли вносите рахунок, тож нова ціна діє лише на наступні ігри. Порожня дата вимикає облік.</p>'+
     '<div class="two"><label class="field">Номер картки<input type="text" inputmode="numeric" id="s-card" value="'+esc(s.card)+'"></label>'+
     '<label class="field">Отримувач<input type="text" id="s-cname" value="'+esc(s.cardName)+'" placeholder="Олексій М."></label></div>'+
-    '<label class="field">Посилання на оплату <span class="hint">необовʼязково, напр. банка Monobank</span><input type="url" id="s-bank" value="'+esc(s.bank)+'" placeholder="https://send.monobank.ua/jar/…"></label></div>'+
+    '<label class="field">Посилання на банку <span class="hint">Monobank; бот дає його як {jar}. Без банки — номер картки</span><input type="url" id="s-bank" value="'+esc(s.bank)+'" placeholder="https://send.monobank.ua/jar/…"></label></div>'+
   '<div class="panel pad stack"><div><h2 class="h">Гра</h2><p class="sub">Для оголошень «Збір є» / «Збір скасовано». Дата береться з гри. Кнопки — на запланованій грі у вкладці «Матчі»</p></div>'+
     '<div class="two"><label class="field">Час гри<input type="time" id="s-time" value="'+esc(s.time)+'"></label>'+
     '<label class="field">Місце<input type="text" id="s-place" value="'+esc(s.place)+'"></label></div>'+
@@ -1229,15 +1257,15 @@ function settingsView(){
     '<div class="three"><label class="field">День запуску<select id="s-pday">'+WD.map(function(d,i){return '<option value="'+(i+1)+'"'+(+s.poll.day===i+1?" selected":"")+'>'+d+'</option>';}).join("")+'</select></label>'+
     '<label class="field">Час запуску<input type="time" step="900" id="s-ptime" value="'+esc(s.poll.time)+'"></label>'+
     '<label class="field">Скільки треба людей<input type="number" min="2" max="30" id="s-pneed" value="'+esc(s.poll.need)+'"></label></div>'+
-    '<p class="note">Організатор (поле «Не платить» в Оплаті) з підключеним ботом отримує звіт про кожну подію й керує командами /poll, /endpoll, /no Імʼя. Автозапуск і нагадування чекають кінця тихих годин. Підстановки: {name} {day} {date} {time} {place} {count} {need} {list} {site}; після гри: {name} {date} {score} (рахунок з боку гравця) {sum} {card} {cardName} {bank}. Кілька варіантів — через рядок <b>---</b></p>'+
+    '<p class="note">Організатор (поле в розділі «Оплата») з підключеним ботом отримує звіт про кожну подію й керує командами /poll, /endpoll, /no Імʼя. Автозапуск і нагадування чекають кінця тихих годин. Підстановки: {name} {day} {date} {time} {place} {count} {need} {list} {site}; після гри: {name} {date} {score} (рахунок з боку гравця) {verdict} {charge} (списано за гру) {balance} (баланс після списання) {jar} (посилання на банку — лише якщо баланс у мінусі; якщо {jar} у тексті немає, бот допише його сам). Кілька варіантів — через рядок <b>---</b></p>'+
     POLLT.map(function(k){return ta("s-"+k[0],k[1],s[k[0]],k[2],4);}).join("")+
     '<details><summary class="note">Короткі фрази бота</summary><div class="stack" style="padding-top:10px">'+
     SAYK.map(function(k){return '<label class="field">'+esc(k[1])+'<input type="text" id="s-say-'+k[0]+'" value="'+esc(s.say[k[0]]||"")+'"></label>';}).join("")+'</div></details></div>'+
-  '<div class="panel pad stack"><div><h2 class="h">Тексти</h2><p class="sub">Кілька варіантів розділяйте рядком <b>---</b>, бот обирає випадковий. Підстановки: {name} {sum} {debt} {date} {score} {verdict} {card} {cardName} {bank} {site}</p></div>'+
-    ta("s-thanks","Подяка після оплати",s.thanks)+
-    ta("s-rem","Нагадування",s.reminders,"{debt} — «гру 6 листопада» або «ігри 30 жовтня і 6 листопада»")+
+  '<div class="panel pad stack"><div><h2 class="h">Тексти</h2><p class="sub">Кілька варіантів розділяйте рядком <b>---</b>, бот обирає випадковий. Підстановки: {name} {balance} (баланс, грн) {jar} (посилання на банку; якщо баланс у мінусі, а {jar} у тексті немає — бот допише) {site}</p></div>'+
+    ta("s-thanks","Подяка за поповнення",s.thanks,"{amount} — зараховано, грн; {date} — дата поповнення")+
+    ta("s-rem","Нагадування, коли баланс у мінусі",s.reminders,"{date} — остання списана гра")+
     '<label class="field">Привітання при підключенні<textarea id="s-hello" rows="3">'+esc(s.hello)+'</textarea></label>'+
-    ta("s-vw","{verdict} після перемоги",s.verdicts.w,"",4)+ta("s-vl","{verdict} після поразки",s.verdicts.l,"",4)+ta("s-vd","{verdict} після нічиєї",s.verdicts.d,"",4)+
+    ta("s-vw","{verdict} після перемоги (у текстах після гри)",s.verdicts.w,"",4)+ta("s-vl","{verdict} після поразки",s.verdicts.l,"",4)+ta("s-vd","{verdict} після нічиєї",s.verdicts.d,"",4)+
     '<div class="row"><span class="row"><button class="btn ghost small" data-act="s-pv-t">Приклад подяки</button><button class="btn ghost small" data-act="s-pv-r">Приклад нагадування</button></span><button class="edit" data-act="s-reset">Повернути стандартні тексти</button></div>'+pv+'</div>'+
   '<div class="row"><span></span><button class="btn" data-act="s-save"'+(busy?" disabled":"")+'>'+(busy?"Зберігаю…":"Зберегти налаштування")+'</button></div>';
 }
@@ -1271,7 +1299,7 @@ function readSets(){
 var POLLT=[["pollInvite","Запрошення","кнопки ✅ Буду · ❌ Не зможу · 🕐 Скажу пізніше · 🌦 Погода додаються самі"],["pollRemind","Нагадування, якщо мовчить 3 год",""],
   ["pollYes","Відповідь на «Буду»",""],["pollNo","Відповідь на «Не зможу»","сумно або смішно"],
   ["pollShort","Усім, коли після «Збір є» хтось скасував","{who} — хто скасував"],["pollBack","Усім, коли знову набралось","{list} — склад"],
-  ["postW","Після гри: перемога",""],["postL","Після гри: поразка",""],["postD","Після гри: нічия",""],["prepaid","Подяка за оплату наперед (гра ще без рахунку)",""]];
+  ["postW","Після гри: перемога",""],["postL","Після гри: поразка",""],["postD","Після гри: нічия",""]];
 var SAYK=[["adminOnly","Не організатор натиснув /poll чи /endpoll"],["closed","Кнопка після закриття опитування"],["noPoll","Опитування не йде"],["notIn","/out, але гравця немає в складі"],
   ["askReason","/out: запит причини"],["outOk","/out: підтвердження"],["inGame","Запрошення після «Буду» ({count} {need})"],["skipped","Запрошення після «Не зможу»"],
   ["full","Передумав або хоче повернутися (кнопка, /in), а склад повний"],["laterAsk","«Скажу пізніше»: коли перепитати"],["laterOk","«Скажу пізніше»: підтвердження ({after})"]];
@@ -1282,7 +1310,7 @@ function saveSets(){
   if((s.sinoptik&&!/^https:\/\//.test(s.sinoptik))||(s.meteo&&!/^https:\/\//.test(s.meteo))){toast("Посилання на погоду мають починатися з https://");return;}
   if(!s.gather.length||!s.cancel.length){toast("Потрібен хоча б один текст «Збір є» і «Збір скасовано»");return;}
   if(s.worker&&!/^https:\/\/[^\/]+$/.test(s.worker)){toast("Адреса бота: https://… без шляху, напр. https://bot.shtuchka.workers.dev");return;}
-  if(s.bank&&!/^https:\/\//.test(s.bank)){toast("Посилання на оплату має починатися з https://");return;}
+  if(s.bank&&!/^https:\/\//.test(s.bank)){toast("Посилання на банку має починатися з https://");return;}
   var r=s.remind;
   if(r._bad){toast("Час відправки: формат ГГ:ХХ з кроком 15 хв, напр. 12:00, 19:30");return;}
   if(r.on&&!r.times.length){toast("Вкажіть хоча б один час відправки");return;}
@@ -1291,7 +1319,7 @@ function saveSets(){
   var pl=s.poll;
   if(pl._bad){toast("Опитування: час запуску у форматі ГГ:ХХ");return;}
   if(!(pl.need>=2&&pl.need<=30)){toast("Опитування: скільки треба людей — від 2 до 30");return;}
-  var need=["pollInvite","pollRemind","pollYes","pollNo","pollShort","pollBack","postW","postL","postD","prepaid"];
+  var need=["pollInvite","pollRemind","pollYes","pollNo","pollShort","pollBack","postW","postL","postD"];
   for(var i=0;i<need.length;i++)if(!s[need[i]].length){toast("Потрібен хоча б один варіант кожного тексту опитування й підсумку гри");return;}
   if(!(s.rainDry>=1&&s.rainDry<=100)){toast("Погода: поріг «сухо» від 1 до 100 %");return;}
   ui.timesRaw=null;
@@ -1363,18 +1391,18 @@ function render(){
   var season=curSeason(), games=sortedGames(S.games.filter(function(g){return played(g)&&inSeason(g);}));
   var ys=years(), seasons=ys.slice().reverse().map(function(y){return '<button class="chip" data-season="'+y+'" aria-pressed="'+(season===y)+'">'+y+'</button>';}).join("")+
     (ys.length>1||!ys.length?'<button class="chip" data-season="all" aria-pressed="'+(season==="all")+'">Весь час</button>':'');
-  var tabs=[["rating","Рейтинг"],["matches","Матчі"],["gen","Команди"],["players","Гравці"],["pay","Оплата"]].concat(editor?[["settings","Налаштування"]]:[]);
-  if(!editor&&ui.tab==="settings")ui.tab="rating";
+  var tabs=[["rating","Рейтинг"],["matches","Матчі"],["gen","Команди"],["players","Гравці"]].concat(editor?[["bal","Баланс"],["settings","Налаштування"]]:[]);
+  if(!editor&&(ui.tab==="settings"||ui.tab==="bal"))ui.tab="rating";
   if(!editor)ui.manage=false;
   var prof=ui.profile, curTab=prof?"players":ui.tab;
   if(wxGame())loadWX();
-  var body=prof?profileView(prof):ui.tab==="matches"?matchesView():ui.tab==="gen"?genView():ui.tab==="pay"?payView():ui.tab==="settings"?settingsView():ui.tab==="players"?(ui.manage?playersView():cardsView()):ratingView(games);
+  var body=prof?profileView(prof):ui.tab==="matches"?matchesView():ui.tab==="gen"?genView():ui.tab==="bal"?balView():ui.tab==="settings"?settingsView():ui.tab==="players"?(ui.manage?playersView():cardsView()):ratingView(games);
   var pp=prof&&pmap()[prof]; document.title=pp?pp.name+" · Пʼятниця 5×5":"Пʼятниця 5×5";
   app.innerHTML='<div class="wrap">'+
     (SET().testMode?'<div class="testbar" role="status">Режим тесту увімкнено</div>':'')+
     '<header class="top"><h1 class="brand"><span class="dot" aria-hidden="true"></span>Пʼятниця 5×5</h1>'+(editor?'<button class="btn" data-act="new-game">+ Гра</button>':'')+'</header>'+
-    (prof||["gen","players","pay","settings"].indexOf(ui.tab)>=0?"":board(games)+wxBlock())+
-    (prof||["gen","players","pay","settings"].indexOf(ui.tab)<0?'<div class="row"><div class="chips" role="group" aria-label="Сезон">'+seasons+'</div></div>':"")+
+    (prof||["gen","players","bal","settings"].indexOf(ui.tab)>=0?"":board(games)+wxBlock())+
+    (prof||["gen","players","bal","settings"].indexOf(ui.tab)<0?'<div class="row"><div class="chips" role="group" aria-label="Сезон">'+seasons+'</div></div>':"")+
     '<nav class="tabs" role="tablist">'+tabs.map(function(t){return '<button class="tab" role="tab" data-tab="'+t[0]+'" aria-selected="'+(curTab===t[0])+'">'+t[1]+'</button>';}).join("")+'</nav>'+
     body+foot()+'</div>'+formView()+loginView()+peditView();
 }
@@ -1393,7 +1421,6 @@ app.addEventListener("click",function(e){
   var ds=t.dataset;
   if(ds.season){ui.season=ds.season;ui.open=null;render();return;}
   if(ds.tab){if(ui.tab==="settings")readSets(); ui.tab=ds.tab;ui.manage=false;ui.preview=null;ui.previewG=null;clearHash();render();window.scrollTo(0,0);return;}
-  if(ds.pay){var pp=ds.pay.split("|");togglePay(pp[0],pp[1]);return;}
   if(ds.remind){remindNow(ds.remind);return;}
   if(ds.unlink){unlinkBot(ds.unlink);return;}
   if(ds.ann){var an=ds.ann.split("|");announceGame(an[0],an[1]);return;}
@@ -1418,19 +1445,21 @@ app.addEventListener("click",function(e){
     case "manage-off": ui.manage=false; ui.players=null; render(); break;
     case "pe-open": if(ui.profile)openPedit(ui.profile); break;
     case "pe-save": savePedit(); break;
-    case "pay-save": savePay(); break;
-    case "pay-cancel": ui.paydraft=null; render(); break;
-    case "pay-all": ui.payAll=!ui.payAll; render(); break;
+    case "top-open": readTop(); topOpen(ds.pid); break;
+    case "top-cancel": ui.topup=null; render(); break;
+    case "top-save": saveTop(); break;
+    case "bal-hist": readTop(); ui.balOpen=ui.balOpen===ds.pid?null:ds.pid; render(); break;
     case "s-save": saveSets(); break;
     case "s-reset": readSets(); ui.sets.thanks=DEF.thanks.slice(); ui.sets.reminders=DEF.reminders.slice(); ui.sets.hello=DEF.hello; ui.sets.verdicts=JSON.parse(JSON.stringify(DEF.verdicts)); ui.sets.gather=DEF.gather.slice(); ui.sets.cancel=DEF.cancel.slice();
       POLLT.forEach(function(k){ui.sets[k[0]]=DEF[k[0]].slice();}); ui.sets.say=JSON.parse(JSON.stringify(DEF.say)); ui.sets.wxDry=DEF.wxDry; ui.sets.wxRain=DEF.wxRain; ui.sets.wxWarn=DEF.wxWarn; ui.preview=null; ui.previewG=null; render(); toast("Стандартні тексти повернуто. Не забудьте зберегти"); break;
     case "s-pv-g": case "s-pv-c": readSets(); var so2=ui.sets, arr2=a==="s-pv-g"?so2.gather:so2.cancel;
       var pg=sortedGames(S.games.filter(function(x){return !played(x)&&gameIds(x).length;})).pop()||sortedGames(S.games.filter(played)).pop();
       ui.previewG=!arr2.length?"Немає текстів":pg?fillT(arr2[Math.floor(Math.random()*arr2.length)],gameVars(pg,gameIds(pg)[0],so2)):"Немає ігор для прикладу"; render(); break;
-    case "s-pv-t": case "s-pv-r": readSets(); var sv=sampleVars(), arr=a==="s-pv-t"?ui.sets.thanks:ui.sets.reminders; var so=ui.sets; sv.sum=sv.sum/SET().price*so.price; sv.card=fmtCard(so.card)||"[картка]"; sv.cardName=so.cardName?"("+so.cardName+")":""; sv.verdict=(so.verdicts.w[0]||""); ui.preview=arr.length?fillT(arr[Math.floor(Math.random()*arr.length)],sv):"Немає текстів"; render(); break;
+    case "s-pv-t": case "s-pv-r": readSets(); var so=ui.sets, sv=sampleVars(so,a==="s-pv-r"?"r":"t"), arr=a==="s-pv-t"?so.thanks:so.reminders, tx=arr[Math.floor(Math.random()*arr.length)];
+      if(tx&&sv.jar&&tx.indexOf("{jar}")<0)tx+="\n{jar}"; ui.preview=arr.length?fillT(tx,sv):"Немає текстів"; render(); break;
     case "login": var gr=guessRepo(), cc=cfgGet(); ui.login={owner:cc.owner||gr.owner,repo:cc.repo||gr.repo}; render(); var lt=document.getElementById(ui.login.owner?"l-token":"l-owner"); if(lt)lt.focus(); break;
     case "l-go": doLogin(); break;
-    case "logout": cfgSet(null); editor=false; sha=null; ui.manage=false; ui.pedit=null; ui.paydraft=null; ui.sets=null; render(); toast("Ви вийшли. Токен видалено з цього браузера"); break;
+    case "logout": cfgSet(null); editor=false; sha=null; ui.manage=false; ui.pedit=null; ui.topup=null; ui.sets=null; render(); toast("Ви вийшли. Токен видалено з цього браузера"); break;
     case "g-plus": ui.gen.guests++; ui.gen.res=null; render(); break;
     case "g-minus": ui.gen.guests=Math.max(0,ui.gen.guests-1); ui.gen.res=null; render(); break;
     case "gen-clear": ui.gen.sel=[]; ui.gen.guests=0; ui.gen.res=null; ui.gen.gid=null; render(); break;
@@ -1493,9 +1522,9 @@ function saveForm(){
     if(old)Object.keys(old).forEach(function(k){g[k]=old[k];});
     g.id=id; g.date=f.date; g.y=y; g.b=b; g.gy=f.gy; g.gb=f.gb;
     if(c.length)g.c=c; else delete g.c;
-    if(hasY){g.sy=+f.sy;g.sb=+f.sb;delete g.x;} else {delete g.sy;delete g.sb;}
-    /* оплата наперед: лишається за тими, хто є в грі (Буде або команда) */
-    if(old&&old.paid){var team=y.concat(b,c), kp=old.paid.filter(function(id){return team.indexOf(id)>=0;}); if(kp.length)g.paid=kp; else delete g.paid;}
+    /* pr — ціна цієї гри: знімок settings.price, коли вносять рахунок (далі зміна ціни цю гру не зачіпає); без рахунку — не потрібна */
+    if(hasY){g.sy=+f.sy;g.sb=+f.sb;delete g.x;if(g.pr==null||g.pr==="")g.pr=+SET().price||0;} else {delete g.sy;delete g.sb;delete g.pr;}
+    /* g.paid — застаріле поле (модель «борг за гру»): лишається в даних як є, ніде не враховується */
     games.push(g); return {v:S.v,players:players,games:sortedGames(games)};
   },hasY?"Гру збережено":"Гру збережено без рахунку","Гра "+f.date+(hasY?" "+f.sy+":"+f.sb:" (без рахунку)"),gid);
 }
