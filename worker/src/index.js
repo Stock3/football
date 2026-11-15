@@ -85,10 +85,11 @@ async function sendWeather(env, C, chat, date, as) {
 // ---------- режим тесту: куди насправді йде повідомлення ----------
 // Звичайно — туди, куди просили. У режимі тесту — завжди в чат адміна: для гравця (pid) або «від імені гравця» (as)
 // з позначкою «👤 для Імʼя:» (+ «немає бота», якщо в нього немає бота), кнопки несуть id гравця. Без адміна-з-ботом — нікуди.
-const tagKb = (kb, pid) => kb && { inline_keyboard: kb.inline_keyboard.map((row) => row.map((b) => {
+// Постійна клавіатура внизу чату (keyboard) і remove_keyboard — без змін: тегуються лише інлайн-кнопки
+const tagKb = (kb, pid) => kb && (!kb.inline_keyboard ? kb : { inline_keyboard: kb.inline_keyboard.map((row) => row.map((b) => {
   const d = b.callback_data ? b.callback_data + "|" + pid : "";
   return d && new TextEncoder().encode(d).length <= 64 ? { ...b, callback_data: d } : b;
-})) };
+})) });
 const forLabel = (C, pid) => "👤 для " + core.nameOf(C, pid) + (C.tg.chats[pid] ? "" : " (немає бота)") + ":\n";
 function route(C, m) {
   if (!core.testOn(C)) return { chat: m.chat, text: m.text, kb: m.kb };
@@ -147,12 +148,16 @@ async function pollRun(env, ev) {
       catch (err) { if (!/not modified/i.test(err.message)) throw err; }
     });
   }
-  const sent = [], failed = [], nobot = [];
+  const sent = [], failed = [], nobot = [], bcFailed = [];
   for (const m of r.msgs) {
     const ok = (await safe("deliver", () => deliver(env, C, m))) === true;
     if (m.pid && !m.admin) (ok ? sent : failed).push(m.name);
     if (!ok && m.inv) nobot.push(m.inv);
+    if (!ok && m.bc) bcFailed.push(m.name);
   }
+  // розсилка: організатору — кому не дійшло (заблокував бота тощо)
+  const ac = core.adminChat(C);
+  if (bcFailed.length && ac != null) await safe("розсилка", () => tgSend(env, ac, "⚠️ Розсилка не дійшла: " + bcFailed.join(", ")));
   if (r.weather) await safe("погода", () => sendWeather(env, C, r.weather.chat, r.weather.date, r.weather.as));
   if (nobot.length) await safe("nobot", () => pollRun(env, { t: "nobot", pids: nobot }));
   return { sent, failed };

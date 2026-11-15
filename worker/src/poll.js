@@ -21,10 +21,12 @@
 //
 // Події ev.t: start (/poll або автозапуск), end (/endpoll), cb (кнопка), ask (/out), out (причина або /skip), in (/in — хочу грати),
 //   who (/who), no (/no Імʼя — організатор відмічає «не зможе»), sync (сайт зберіг дані), tick (cron), nobot (не дійшло запрошення),
-//   testreset (/testreset — лише в режимі тесту: скинути опитування й прапорці надсилання тестової гри).
+//   testreset (/testreset — лише в режимі тесту: скинути опитування й прапорці надсилання тестової гри),
+//   bctext / bccancel (текст розсилки й /cancel), а кнопки «adm:…»/«bc:…» (меню адміна, розсилка) — у cb → admin.js; розсилка — tg.bc.
 // Режим тесту (settings.testMode): ev.as — id гравця, від імені якого діє адмін (/as; кнопка в перенаправленому повідомленні несе id
 //   гравця третьою частиною callback_data «дія|гра|гравець»). Події не з чату адміна ігноруються.
-import { fill, pick, nameOf, gameIds, gameVars, dmon, played, inQuiet, nextFriday, addDays, gameTime, DAYS, chatFor, testOn, testBlocked } from "./core.js";
+import { fill, pick, nameOf, gameIds, gameVars, dmon, played, inQuiet, nextFriday, addDays, gameTime, DAYS, chatFor, testOn, testBlocked, bcActive } from "./core.js";
+import * as admin from "./admin.js";
 
 export const REMIND_AFTER_H = 3;
 const H = 3600e3;
@@ -105,6 +107,7 @@ const laterKb = (gid, day) => kb([LATER_OPTS[day ? "day" : "other"].map((m) => [
 // ---------- крок ----------
 export function step(C, ev) {
   const tg = clone(C.tg);
+  if (tg.bc && !bcActive(tg, C.now.getTime())) delete tg.bc; // розсилка, що застрягла (годину без дій), — прибрати
   const X = {
     C, ev, D: clone(C.data), tg, P: tg.poll || null, now: C.now.toISOString(),
     msgs: [], edits: [], answer: null, weather: null, head: [], tail: [], left: [], notes: [], dnotes: [],
@@ -362,6 +365,23 @@ function out(X, g, pid, reason, src, m) {
   return true;
 }
 
+// Організатор відмічає, що гравець не зможе (/no Імʼя, меню адміна → «Не зможе»)
+function markNo(X, g, pid) {
+  const inv = X.P.inv[pid];
+  if (inGame(g, pid) || (inv && inv.ans === "yes")) { out(X, g, pid, "", "admin"); return; }
+  inv.ans = "no"; delete inv.laterUntil; delete inv.nobot;
+  unqueue(X.P, pid); // організатор каже «не зможе» — з черги теж прибираємо
+  const invd = fillSlots(X, g);
+  X.head.push(`❌ ${nameOf(X.C, pid)} — не зможе (відмітив організатор)` + arrow(invd));
+  X.notes.push(nameOf(X.C, pid) + " не зможе");
+}
+// Поточна гра: гра опитування, а якщо її немає чи вона зіграна/скасована — найближча запланована
+function current(X) {
+  let g = game(X);
+  if (!g || played(g) || g.x) g = X.D.games.filter((x) => !played(x) && !x.x && x.date >= X.C.T.date).sort((a, b) => (a.date < b.date ? -1 : 1))[0];
+  return g || null;
+}
+
 // ---------- обробники подій ----------
 const HANDLERS = {
   start: (X, ev) => start(X, !!ev.auto),
@@ -374,6 +394,7 @@ const HANDLERS = {
   },
   cb(X, ev) {
     const [a, gid] = String(ev.data || "").split("|");
+    if (/^(adm|bc):/.test(a)) return admin.cb(X, ev, HOOK);
     if (a === "w") { const wg = X.D.games.find((x) => x.id === gid); X.weather = { chat: ev.chat, date: wg && !played(wg) ? wg.date : null, ...(X.as ? { as: X.as } : {}) }; return; }
     if (!X.pid) { X.answer.text = "Я тебе ще не знаю 🙂 Натисни /start"; return; }
     const g = game(X);
@@ -414,8 +435,7 @@ const HANDLERS = {
     out(X, g, pid, ev.reason || "", "cmd");
   },
   who(X, ev) {
-    let g = game(X);
-    if (!g || played(g) || g.x) g = X.D.games.filter((x) => !played(x) && !x.x && x.date >= X.C.T.date).sort((a, b) => (a.date < b.date ? -1 : 1))[0];
+    const g = current(X);
     reply(X, ev.chat, g ? whoText(X.C, g, X.P) : say(X, "noPoll"));
   },
   no(X, ev) {
@@ -426,14 +446,10 @@ const HANDLERS = {
     const by = (f) => ids.filter((id) => f(String(nameOf(X.C, id)).toLowerCase()));
     let c = by((n) => n === q); if (!c.length) c = by((n) => n.startsWith(q));
     if (c.length !== 1) { X.head.push(c.length ? `Кілька збігів: ${c.map((id) => nameOf(X.C, id)).join(", ")} — уточни імʼя` : `Не знайшов «${ev.arg}» серед запрошених і в складі`); return; }
-    const pid = c[0], inv = X.P.inv[pid];
-    if (inGame(g, pid) || (inv && inv.ans === "yes")) { out(X, g, pid, "", "admin"); return; }
-    inv.ans = "no"; delete inv.laterUntil; delete inv.nobot;
-    unqueue(X.P, pid); // організатор каже «не зможе» — з черги теж прибираємо
-    const invd = fillSlots(X, g);
-    X.head.push(`❌ ${nameOf(X.C, pid)} — не зможе (відмітив організатор)` + arrow(invd));
-    X.notes.push(nameOf(X.C, pid) + " не зможе");
+    markNo(X, g, c[0]);
   },
+  bctext: (X, ev) => admin.text(X, ev, HOOK),
+  bccancel: (X, ev) => (X.pid && X.pid === X.C.S.org ? admin.cancel(X, ev) : reply(X, ev.chat, say(X, "adminOnly"))),
   testreset(X) {
     if (!testOn(X.C)) { X.head.push("ℹ️ /testreset працює лише в режимі тесту"); return; }
     const gid = X.P && X.P.game;
@@ -484,6 +500,9 @@ const HANDLERS = {
     if (reminded.length) { X.head.push(`⏳ День гри, нагадав: ${reminded.join(", ")}`); X.notes.push("нагадано " + reminded.join(", ")); }
   },
 };
+
+// Що потрібно admin.js від опитування (меню адміна)
+const HOOK = { start: (X) => start(X, false), end: (X) => HANDLERS.end(X), game, current, markNo, toP };
 
 function start(X, auto) {
   const C = X.C, date = pollDate(C), N = need(C);

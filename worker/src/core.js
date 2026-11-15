@@ -78,7 +78,8 @@ export function nextFriday(T) {
 export const gameTime = (S) => hm(S.time) || "21:00";
 
 // ---------- стан (tg.json) ----------
-// { chats: {pid: {id, u, at}}, sent: {id: {pid: {thx?, pg?, r: []}}}, slots: ["YYYY-MM-DD HH:MM"], poll? }
+// { chats: {pid: {id, u, at}}, sent: {id: {pid: {thx?, pg?, r: []}}}, slots: ["YYYY-MM-DD HH:MM"], poll?, bc? }
+// bc — розсилка організатора, що готується (окремо від poll.wait — причини /out): {step:"text"|"preview", aud:"all"|"game", at, id?, text?, ids?}
 // id у sent — або id гри (pg — підсумок гри зі списанням; r — нагадування про мінусовий баланс, привʼязані до останньої списаної гри),
 // або id поповнення players[].top[].id (thx — подяку за поповнення надіслано). poll — стан опитування (див. poll.js).
 // r — записи «YYYY-MM-DD HH:MM» (слот розкладу) або «YYYY-MM-DD manual» (кнопка на сайті); старі — просто дата.
@@ -86,6 +87,7 @@ export function normState(tg) {
   tg = tg && typeof tg === "object" ? tg : {};
   const s = { chats: { ...(tg.chats || {}) }, sent: JSON.parse(JSON.stringify(tg.sent || {})), slots: [...(tg.slots || [])] };
   if (tg.poll && typeof tg.poll === "object") s.poll = JSON.parse(JSON.stringify(tg.poll));
+  if (tg.bc && typeof tg.bc === "object") s.bc = JSON.parse(JSON.stringify(tg.bc));
   return s;
 }
 const sentGet = (tg, gid, pid) => { const x = tg.sent[gid] && tg.sent[gid][pid]; return { thx: x && x.thx, pg: x && x.pg, r: (x && x.r) || [] }; };
@@ -201,6 +203,29 @@ export function gameVars(C, g, pid) {
 }
 const toPlayer = (C, pid, text, ops, kb) => ({ chat: chatFor(C, pid).id, pid, name: nameOf(C, pid), text, ops: ops || [], ...(kb ? { kb } : {}) });
 
+// ---------- кнопки внизу чату й меню адміна ----------
+// Постійна клавіатура (reply keyboard) — це просто текст, який Telegram надсилає як звичайне повідомлення.
+// Єдина таблиця: текст кнопки → команда; onMessage підміняє текст на команду, далі працюють ті самі обробники, що й для команд.
+const noVs = (s) => String(s).replace(/️/g, "").trim(); // клієнти можуть додавати чи губити селектор варіанта емодзі
+export const MENU = {
+  in: ["✅ Хочу грати", "/in"], out: ["❌ Не зможу", "/out"], who: ["👥 Хто йде", "/who"], weather: ["🌦 Погода", "/weather"],
+  balance: ["💰 Баланс", "/balance"], topup: ["💳 Поповнити", "/topup"], stop: ["🔕 Відписатися", "/stop"], admin: ["⚙️ Адмін", "/admin"],
+};
+const BTN_CMD = Object.fromEntries(Object.values(MENU).map(([t, c]) => [noVs(t), c]));
+// Клавіатура гравця; адміну (settings.org) — ще «⚙️ Адмін»
+export const mainKb = (admin) => ({
+  keyboard: [[MENU.in[0], MENU.out[0]], [MENU.who[0], MENU.weather[0]], [MENU.balance[0], MENU.topup[0]], admin ? [MENU.stop[0], MENU.admin[0]] : [MENU.stop[0]]].map((r) => r.map((text) => ({ text }))),
+  is_persistent: true, resize_keyboard: true,
+});
+// Інлайн-меню адміна (callback_data «adm:…» без «|» — щоб не плутатись із третьою частиною «гравець» у режимі тесту)
+export const adminKb = () => ({ inline_keyboard: [
+  [{ text: "Почати опитування", callback_data: "adm:poll" }, { text: "Закрити опитування", callback_data: "adm:end" }],
+  [{ text: "Не зможе", callback_data: "adm:no" }, { text: "📣 Розсилка", callback_data: "adm:bc" }],
+] });
+// Розсилка, що готується (tg.bc), живе годину від останньої дії: інакше повідомлення адміна через тиждень стало б її текстом
+export const BC_TTL = 60 * 60e3;
+export const bcActive = (tg, now) => { const b = tg && tg.bc; return b && (b.step === "text" || b.step === "preview") && now - Date.parse(b.at) < BC_TTL ? b : null; };
+
 // ---------- 1. вхідні повідомлення ----------
 // Повертає {msgs, ops}, {weather: {chat}} — прогноз index.js дотягує з Open-Meteo сам,
 // або {poll: подія} — опитування обробляє poll.step (index.js).
@@ -208,7 +233,8 @@ const toPlayer = (C, pid, text, ops, kb) => ({ chat: chatFor(C, pid).id, pid, na
 export function onMessage(C, m, as) {
   const out = { msgs: [], ops: [] };
   if (!m || typeof m.text !== "string" || !m.chat || m.chat.type !== "private") return out;
-  const text = m.text.trim(), chatId = m.chat.id, uname = (m.from && m.from.username) || "";
+  const raw = m.text.trim(), chatId = m.chat.id, uname = (m.from && m.from.username) || "";
+  const text = BTN_CMD[noVs(raw)] || raw; // кнопка внизу чату → та сама команда
   const say = (t, kb) => { out.msgs.push({ chat: chatId, text: t, ...(kb ? { kb } : {}), ...(as ? { as } : {}) }); return out; };
   const [cmd, ...rest] = text.split(/\s+/), arg = rest[0];
   const c = (cmd || "").toLowerCase().replace(/@.*$/, "");
@@ -229,10 +255,14 @@ export function onMessage(C, m, as) {
     return onMessage(C, { ...m, text: inner }, hit[0].id);
   }
   if (as && (c === "/start" || c === "/stop" || c === "/as" || c === "/testreset")) return say("Ця команда не працює через /as (вона змінила б реальне підключення або сам тест)");
-  // після /out бот чекає причину: наступне повідомлення (не команда) — це причина, /skip — без причини
-  if (pid && P && P.wait && P.wait[pid]) {
-    if (c === "/skip") return { ...out, poll: { t: "out", chat: chatId, reason: "", ...asEv } };
-    if (!text.startsWith("/")) return { ...out, poll: { t: "out", chat: chatId, reason: text.slice(0, 200), ...asEv } };
+  // Два окремі «очікування наступного повідомлення»: причина після /out (poll.wait[pid]) і текст розсилки адміна (tg.bc).
+  // Команда чи кнопка їх не зачіпають; звичайний текст іде тому, що почалось пізніше. /skip — без причини, /cancel — скасувати розсилку.
+  const wt = pid && P && P.wait && P.wait[pid];
+  const bc = pid && pid === C.S.org ? bcActive(C.tg, C.now) : null;
+  if (c === "/skip" && wt) return { ...out, poll: { t: "out", chat: chatId, reason: "", ...asEv } };
+  if (!text.startsWith("/")) {
+    if (bc && !(wt && Date.parse(wt) > Date.parse(bc.at))) return { ...out, poll: { t: "bctext", chat: chatId, text: text.slice(0, 3000), ...asEv } };
+    if (wt) return { ...out, poll: { t: "out", chat: chatId, reason: text.slice(0, 200), ...asEv } };
   }
   if (c === "/weather" || /^погода/i.test(text)) return { ...out, weather: { chat: chatId, ...asEv } }; // будь-кому, навіть не підключеним
   if (c === "/start") {
@@ -245,12 +275,17 @@ export function onMessage(C, m, as) {
     // якщо в профілі вказано username, підключитися може лише ця людина
     if (p.tg && p.tg.toLowerCase() !== uname.toLowerCase()) return say(`Це посилання для гравця ${p.name} 🙂 Відкрий свій профіль на сайті.`);
     out.ops.push({ op: "link", pid: p.id, id: chatId, u: uname, at: C.now.toISOString() });
-    return say(fill(C.S.hello, { name: p.name, site: C.site }));
+    return say(fill(C.S.hello, { name: p.name, site: C.site }), mainKb(p.id === C.S.org)); // кнопки внизу чату — при підключенні
   }
   if (c === "/stop") {
     if (pid) out.ops.push({ op: "unlink", pid });
-    return say("Гаразд, більше не пишу. Повернутися: /start");
+    return say("Гаразд, більше не пишу. Повернутися: /start", { remove_keyboard: true });
   }
+  if (c === "/admin") {
+    if (!pid || pid !== C.S.org) return say(C.S.say.adminOnly);
+    return say("⚙️ Адмін", adminKb());
+  }
+  if (c === "/cancel") return bc ? { ...out, poll: { t: "bccancel", chat: chatId, ...asEv } } : say("Нічого скасовувати 🙂");
   // команди організатора (немає в меню); організатор — гравець settings.org з підключеним ботом
   if (c === "/poll" || c === "/endpoll" || c === "/no") {
     if (!pid || pid !== C.S.org) return say(C.S.say.adminOnly);
