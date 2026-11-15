@@ -271,7 +271,7 @@ function mockWorld({ data = fixture(), tg = { chats }, conflicts = 0, onConflict
       if (method === "getWebhookInfo") return res(200, { ok: true, result: { url: "https://bot.example/tg", pending_update_count: 0 } });
       return res(200, { ok: true, result: true });
     }
-    if (url.startsWith("https://api.open-meteo.com/")) { w.om++; return res(500, {}); }
+    if (url.startsWith("https://api.open-meteo.com/")) { w.om++; return w.omJson ? res(200, w.omJson) : res(500, {}); }
     if (url.startsWith("https://api.github.com/repos/Stock3/football/")) {
       assert.equal(hdr.Authorization, "Bearer " + GHT);
       assert.ok(hdr["User-Agent"]);
@@ -319,6 +319,20 @@ test("webhook: /balance не пише tg.json; /weather при помилці Op
   assert.match(w.sent.find((m) => m.chat_id === 102).text, /^💰 Баланс: -81 грн/);
   assert.match(w.sent.find((m) => m.chat_id === 9999).text, /недоступний/);
   assert.equal(w.om, 1);
+});
+test("webhook: /weather — погодинний вигляд HTML з <pre> (parse_mode HTML)", async () => {
+  const w = mockWorld(), c = ctxMock();
+  const time = [], mk = (v) => time.map(() => v), h = {};
+  for (let d = -1; d < 10; d++) for (let i = 0; i < 24; i++) time.push(new Date(Date.now() + d * 864e5).toISOString().slice(0, 10) + "T" + String(i).padStart(2, "0") + ":00");
+  for (const m of ["ecmwf_ifs025", "gfs_seamless", "icon_seamless"]) Object.assign(h, { ["temperature_2m_" + m]: mk(5), ["precipitation_" + m]: mk(0), ["precipitation_probability_" + m]: mk(20), ["weather_code_" + m]: mk(3) });
+  w.omJson = { hourly: { time, ...h } };
+  await worker.fetch(req("/tg", { method: "POST", headers: { "X-Telegram-Bot-Api-Secret-Token": SECRET }, body: JSON.stringify({ message: pm("/weather", 9999) }) }), env, c);
+  await quiet(() => c.done());
+  const m = w.sent.find((x) => x.chat_id === 9999);
+  assert.equal(m.parse_mode, "HTML");
+  assert.match(m.text, /^🌦 [^\n]+\n✅ Без опадів\n<pre>10 ☁️  5° 0.0 мм  20%\n/);
+  assert.ok(m.text.endsWith("</pre>"));
+  assert.equal(m.text.split("\n").length, 2 + 14, "шапка, підсумок і 14 рядків (перший у рядку <pre>)");
 });
 test("tg.json: конфлікт (гілку змінено) → перечитати, застосувати знову (зберігаються обидві зміни)", async () => {
   const w = mockWorld({ tg: { chats: {} }, conflicts: 1, onConflict: (w) => { w.files["tg.json"] = JSON.stringify({ chats: { p3: { id: 103 } }, sent: {}, slots: [] }); } }), c = ctxMock();

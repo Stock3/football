@@ -79,7 +79,7 @@ async function sendWeather(env, C, chat, date, as) {
     const res = await fetch(core.WX.url(C.S, env.OM_API));
     if (res.ok) w = await res.json(); else console.log("Open-Meteo:", res.status);
   } catch (e) { console.log("Open-Meteo:", e.message); }
-  await deliver(env, C, { chat, text: core.weatherReply(C, w, date), ...(as ? { as } : {}) });
+  await deliver(env, C, { chat, text: core.weatherReply(C, w, date), html: true, ...(as ? { as } : {}) });
 }
 
 // ---------- режим тесту: куди насправді йде повідомлення ----------
@@ -92,18 +92,18 @@ const tagKb = (kb, pid) => kb && (!kb.inline_keyboard ? kb : { inline_keyboard: 
 })) });
 const forLabel = (C, pid) => "👤 для " + core.nameOf(C, pid) + (C.tg.chats[pid] ? "" : " (немає бота)") + ":\n";
 function route(C, m) {
-  if (!core.testOn(C)) return { chat: m.chat, text: m.text, kb: m.kb };
+  if (!core.testOn(C)) return { chat: m.chat, text: m.text, kb: m.kb, html: m.html };
   const A = core.adminChat(C);
   if (A == null) return null;
   const pid = m.pid || m.as;
-  if (m.admin || !pid || pid === C.S.org) return { chat: A, text: m.text, kb: m.kb }; // уже адміну: без змін
+  if (m.admin || !pid || pid === C.S.org) return { chat: A, text: m.text, kb: m.kb, html: m.html }; // уже адміну: без змін
   // розсилка в тесті: усе йде адміну, тож і клавіатура внизу — адмінська
-  return { chat: A, text: forLabel(C, pid) + m.text, kb: m.bc ? core.mainKb(true) : tagKb(m.kb, pid) };
+  return { chat: A, text: (m.html ? core.hesc(forLabel(C, pid)) : forLabel(C, pid)) + m.text, html: m.html, kb: m.bc ? core.mainKb(true) : tagKb(m.kb, pid) };
 }
 async function deliver(env, C, m) {
   const d = route(C, m);
   if (!d) { console.log("режим тесту: адміна без бота немає — повідомлення не надіслано"); return false; }
-  return tgSend(env, d.chat, d.text, d.kb);
+  return tgSend(env, d.chat, d.text, d.kb, d.html);
 }
 // Редагування повідомлення: у режимі тесту — те саме, що в адмін-чаті (позначка й кнопки від імені гравця зберігаються)
 function routeEdit(C, e) {
@@ -361,7 +361,7 @@ async function tgCall(env, method, body) {
   if (!j.ok) throw new Error(j.description || "HTTP " + r.status);
   return j.result;
 }
-async function tgSend(env, chat, textBody, kb) {
-  try { await tgCall(env, "sendMessage", { chat_id: chat, text: textBody, disable_web_page_preview: true, ...(kb ? { reply_markup: kb } : {}) }); return true; }
+async function tgSend(env, chat, textBody, kb, html) {
+  try { await tgCall(env, "sendMessage", { chat_id: chat, text: textBody, disable_web_page_preview: true, ...(html ? { parse_mode: "HTML" } : {}), ...(kb ? { reply_markup: kb } : {}) }); return true; }
   catch (e) { console.log("Telegram sendMessage:", e.message); return false; }
 }

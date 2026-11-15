@@ -66,7 +66,47 @@ export const WX = (/*WX*/function(){
     if(!m.ok)return n+"немає прогнозу";
     return n+icon(m.at.code,hour)+" "+deg(m.at.t)+" (відч. "+deg(m.at.app)+") · "+pct(m.at.pp)+" · "+ms(m.at.wind);
   }
-  /* повний текст (бот) */
+  /* Погодинний вигляд (лише бот): 10:00–23:00 дати гри, по рядку на годину. Значення години — медіана доступних моделей
+     (не середнє, щоб один викид не тягнув решту); ймовірність опадів у Open-Meteo є для кожної з 3 моделей окремо.
+     ⚠️ — моделі розходяться: одна суха, інша з опадами (≥ WET_MM), або розкид опадів ≥ SPREAD_MM. */
+  var H_FROM=10,H_TO=23,WET_MM=0.2,SPREAD_MM=1;
+  function medCode(a){a=a.filter(function(v){return v!=null;}).sort(function(x,y){return x-y;});return a.length?a[Math.floor(a.length/2)]:null;}
+  function pad(s,n){s=String(s);while(s.length<n)s=" "+s;return s;}
+  function rainy(r){return r.mm!=null&&r.mm>=WET_MM;}
+  function hourIcon(r){
+    var c=r.code; if(rainy(r)&&(c==null||c<51))c=r.t!=null&&r.t<=0?71:61; /* опади є, а код «без опадів» — довіряємо опадам */
+    return icon(c,r.hour);
+  }
+  function hourLine(r){
+    var t=r.t==null?"?°":(Math.round(r.t)<0?"−":"")+Math.abs(Math.round(r.t))+"°";
+    return pad(r.hour,2)+" "+hourIcon(r)+" "+pad(t,3)+" "+pad(r.mm==null?"—":r.mm.toFixed(1),3)+" мм "+pad(r.pp==null?"—":Math.round(r.pp),3)+"%"+(r.warn?" ⚠️":"");
+  }
+  /* json — відповідь Open-Meteo; date — "YYYY-MM-DD"; time — час гри "HH:MM" (для «поле може бути мокре»: опади до гри) */
+  function hourly(json,date,time){
+    var h=(json&&json.hourly)||{}, t=h.time||[], gh=+(/^(\d{1,2})/.exec(time||"")||[0,21])[1], all=[];
+    t.forEach(function(x,i){
+      if(x.slice(0,10)!==date)return;
+      var T=[],P=[],R=[],C=[];
+      MODELS.forEach(function(m){
+        function v(k){var a=h[k+"_"+m[0]];return a?num(a[i]):null;}
+        var x1=v("temperature_2m"); if(x1==null)return; /* модель без даних на цю годину пропускаємо */
+        T.push(x1);
+        if((x1=v("precipitation_probability"))!=null)P.push(x1);
+        if((x1=v("precipitation"))!=null)R.push(x1);
+        if((x1=v("weather_code"))!=null)C.push(x1);
+      });
+      if(!T.length)return;
+      var wet=R.filter(function(v){return v>=WET_MM;}).length;
+      all.push({hour:+x.slice(11,13),n:T.length,t:med(T),pp:med(P),mm:med(R),code:medCode(C),
+        warn:R.length>1&&((wet>0&&wet<R.length)||Math.max.apply(null,R)-Math.min.apply(null,R)>=SPREAD_MM)});
+    });
+    var rows=all.filter(function(r){return r.hour>=H_FROM&&r.hour<=H_TO;}), spans=[];
+    rows.filter(rainy).forEach(function(r){var l=spans[spans.length-1];if(l&&l[1]===r.hour-1)l[1]=r.hour;else spans.push([r.hour,r.hour]);});
+    var wetField=all.some(function(r){return r.hour<gh&&rainy(r);});
+    var sum=(spans.length?"🌧 Опади: "+spans.map(function(s){return s[0]===s[1]?""+s[0]:s[0]+"–"+s[1];}).join(", ")+" год":wetField?"✅ Опадів з "+H_FROM+":00 немає":"✅ Без опадів")+(wetField?" · поле може бути мокре":"");
+    return {date:date,rows:rows,summary:rows.length?sum:"",lines:rows.map(hourLine),anyWarn:rows.some(function(r){return r.warn;}),wetField:wetField};
+  }
+  /* повний текст (старий вигляд: бот його більше не шле, лишився для сумісності) */
   function text(r,o){
     var hour=+r.time.slice(0,2), L=[head(r,o.city),dayLine(r),"",gameHead(r)], v=verdictText(r,o.verdicts);
     r.models.forEach(function(m){L.push(modelLine(m,hour,true));});
@@ -78,5 +118,5 @@ export const WX = (/*WX*/function(){
     var m=r.med; if(!m)return "";
     return icon(m.code,+r.time.slice(0,2))+" "+deg(m.t)+" · "+pct(m.pp)+" · "+ms(m.wind)+" о "+r.time+(r.warn?" ⚠️":"");
   }
-  return {url:url,build:build,text:text,line:line,head:head,dayLine:dayLine,gameHead:gameHead,verdictText:verdictText,modelLine:modelLine,icon:icon};
+  return {url:url,build:build,text:text,line:line,head:head,dayLine:dayLine,gameHead:gameHead,verdictText:verdictText,modelLine:modelLine,icon:icon,hourly:hourly};
 }/*/WX*/)();

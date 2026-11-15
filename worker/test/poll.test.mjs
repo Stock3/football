@@ -410,36 +410,88 @@ test("старий paid (і на запланованій грі) нічого �
   assert.ok(core.reminders(ctxNow(data), { manual: true }).msgs.every((m) => m.kb && m.kb.inline_keyboard[0][0].url === BANK));
 });
 
-// ---------- погода ----------
-function wxJson(pp) { // pp — ймовірність опадів о 21:00 для ECMWF, GFS, ICON
+// ---------- погода (погодинний вигляд) ----------
+const WXM = ["ecmwf_ifs025", "gfs_seamless", "icon_seamless"];
+// spec: { година: [[mm, pp, t, code] для ECMWF, GFS, ICON] }; решта годин — суха хмарна година (0 мм, 10 %, 6°, код 3)
+function wxHours(spec = {}, date = "2026-11-13") {
   const time = [], h = {};
-  for (let i = 0; i < 24; i++) time.push("2026-11-13T" + String(i).padStart(2, "0") + ":00");
-  ["ecmwf_ifs025", "gfs_seamless", "icon_seamless"].forEach((m, k) => {
-    h["temperature_2m_" + m] = time.map(() => 6); h["apparent_temperature_" + m] = time.map(() => 3);
-    h["precipitation_probability_" + m] = time.map((t, i) => (i === 21 ? pp[k] : 10)); h["precipitation_" + m] = time.map(() => 0);
-    h["wind_speed_10m_" + m] = time.map(() => 4); h["weather_code_" + m] = time.map(() => 3);
+  for (let i = 0; i < 24; i++) time.push(date + "T" + String(i).padStart(2, "0") + ":00");
+  WXM.forEach((m, k) => {
+    const col = (j, def) => time.map((x, i) => { const v = spec[i] ? spec[i][k][j] : def; return v; });
+    h["precipitation_" + m] = col(0, 0); h["precipitation_probability_" + m] = col(1, 10);
+    h["temperature_2m_" + m] = col(2, 6); h["weather_code_" + m] = col(3, 3);
   });
   return { hourly: { time, ...h } };
 }
-test("погода: «Вдень (08:00–20:00)», «⚽ На гру, 21:00:», без «Оновлено», три вердикти", () => {
-  const C = ctxNow(fixture());
-  const t = core.weatherReply(C, wxJson([10, 20, 30]), "2026-11-13");
+const wxText = (spec, d) => { const C = ctxNow(d || fixture()); return core.weatherReply(C, wxHours(spec), "2026-11-13"); };
+const wxLines = (t) => t.match(/<pre>([\s\S]*)<\/pre>/)[1].split("\n");
+const rainSpec = (from, to, mm = [1.2, 1.0, 1.4]) => { const s = {}; for (let h = from; h <= to; h++) s[h] = [[mm[0], 60, 6, 61], [mm[1], 70, 6, 63], [mm[2], 80, 6, 61]]; return s; };
+
+test("погода: шапка, підсумок і 14 рядків 10–23 у <pre>; сухо", () => {
+  const t = wxText({});
   const L = t.split("\n");
   assert.equal(L[0], "🌦 Пʼятниця, 13 листопада · Чернівці");
-  assert.match(L[1], /^Вдень \(08:00–20:00\): \+6…\+6°/);
-  assert.equal(L[3], "⚽ На гру, 21:00:");
-  assert.ok(!/Оновлено/.test(t) && !/https?:/.test(t));
-  assert.equal(L.at(-1), "✅ Схоже, зіграємо сухими");
-  assert.equal(core.weatherReply(C, wxJson([10, 50, 30]), "2026-11-13").split("\n").at(-1), "☔ Можливий дощ");
-  assert.equal(core.weatherReply(C, wxJson([95, 92, 30]), "2026-11-13").split("\n").at(-1), "⚠️ Погода під питанням");
-  // пороги й тексти з налаштувань; інший час гри — інший діапазон дня
-  const d = fixture(); Object.assign(d.settings, { time: "19:00", rainDry: 60, wxRain: "☔ Можлива мряка" });
-  const t2 = core.weatherReply(ctxNow(d), wxJson([10, 50, 30]), "2026-11-13");
-  assert.match(t2, /Вдень \(08:00–18:00\)/);
-  assert.match(t2, /⚽ На гру, 19:00:/);
-  const d3 = fixture(); d3.settings.wxRain = "☔ Можлива мряка";
-  assert.equal(core.weatherReply(ctxNow(d3), wxJson([10, 50, 30]), "2026-11-13").split("\n").at(-1), "☔ Можлива мряка");
+  assert.equal(L[1], "✅ Без опадів");
+  assert.ok(L[2].startsWith("<pre>") && t.endsWith("</pre>"), "жодного рядка після блоку: без ⚠️ немає пояснення");
+  const rows = wxLines(t);
+  assert.equal(rows.length, 14);
+  assert.ok(rows[0].startsWith("10 ") && rows[13].startsWith("23 "));
+  assert.equal(rows[5], "15 ☁️  6° 0.0 мм  10%");
+  assert.ok(!/Оновлено|https?:|вітер/i.test(t), "без вітру й посилань");
 });
+
+test("погода: значення години — медіана 3 моделей, а не середнє; різке розходження → ⚠️", () => {
+  // 15:00: опади 0 / 0 / 6 мм (середнє 2, медіана 0), ймовірність 10 / 20 / 90 (медіана 20), температура 4 / 6 / 30 (медіана 6)
+  const t = wxText({ 15: [[0, 10, 4, 3], [0, 20, 6, 3], [6, 90, 30, 3]] });
+  assert.equal(wxLines(t)[5], "15 ☁️  6° 0.0 мм  20% ⚠️");
+  assert.ok(t.endsWith("\n⚠️ — моделі розходяться"));
+  assert.equal(t.split("\n")[1], "✅ Без опадів", "підсумок теж за медіаною");
+});
+
+test("погода: дощові години — іконка, мм, відсотки, підсумок і «поле може бути мокре»", () => {
+  const t = wxText(rainSpec(14, 16));
+  assert.equal(t.split("\n")[1], "🌧 Опади: 14–16 год · поле може бути мокре");
+  assert.equal(wxLines(t)[5], "15 🌧  6° 1.2 мм  70%");
+  assert.ok(!t.includes("⚠️ — "), "моделі згодні (опади в усіх) — без ⚠️");
+  // дощ лише після початку гри (21:00) — поле не мокре; дві смуги й одиночна година
+  const s = { ...rainSpec(22, 22), ...rainSpec(23, 23) }; assert.equal(wxText(s).split("\n")[1], "🌧 Опади: 22–23 год");
+  const s2 = { ...rainSpec(11, 12), ...rainSpec(18, 18) }; assert.equal(wxText(s2).split("\n")[1], "🌧 Опади: 11–12, 18 год · поле може бути мокре");
+  // дощ лише вночі/зранку до 10:00 — рядки сухі, але поле мокре
+  assert.equal(wxText(rainSpec(5, 6)).split("\n")[1], "✅ Опадів з 10:00 немає · поле може бути мокре");
+  // дощ о 22:00 при грі о 19:00 — після гри
+  const d = fixture(); d.settings.time = "19:00";
+  assert.equal(wxText(rainSpec(20, 21), d).split("\n")[1], "🌧 Опади: 20–21 год");
+});
+
+test("погода: поріг ⚠️ — суха проти мокрої, розкид ≥ SPREAD_MM; сліди (<0,2 мм) не рахуються", () => {
+  const flag = (mm) => wxLines(wxText({ 13: mm.map((x) => [x, 50, 6, 3]) }))[3].endsWith("⚠️");
+  assert.equal(flag([0, 0, 0.5]), true, "одна модель з дощем, дві сухі");
+  assert.equal(flag([0, 0.1, 0.1]), false, "сліди — не дощ");
+  assert.equal(flag([0.3, 0.5, 1.2]), false, "усі мокрі, розкид 0,9 мм");
+  assert.equal(flag([0.3, 0.5, 1.4]), true, "усі мокрі, розкид 1,1 мм");
+  assert.equal(flag([2, 2, 2]), false);
+});
+
+test("погода: бракує моделі чи ймовірності — медіана з решти; без даних — ввічлива відповідь", () => {
+  const wet = [[0.4, 40, 5, 61], [0.4, 60, 7, 61], [0.4, 0, 9, 61]];
+  const j = wxHours({ 15: wet, 16: wet });
+  j.hourly.precipitation_probability_icon_seamless[15] = null; // ICON без ймовірності: медіана 40 і 60 = 50
+  j.hourly.temperature_2m_gfs_seamless[16] = null; // GFS без даних: модель на цю годину пропускається; температура 5 і 9 → 7, ймовірність 40 і 0 → 20
+  const rows = wxLines(core.weatherReply(ctxNow(fixture()), j, "2026-11-13"));
+  assert.equal(rows[5], "15 🌧  7° 0.4 мм  50%");
+  assert.equal(rows[6], "16 🌧  7° 0.4 мм  20%");
+  const C = ctxNow(fixture());
+  assert.match(core.weatherReply(C, null, "2026-11-13"), /недоступний/);
+  assert.match(core.weatherReply(C, wxHours({}, "2026-11-20"), "2026-11-13"), /Прогнозу на цю дату ще немає/);
+});
+
+test("погода: мінусова температура, «опади, а код сухий» → дощ/сніг; HTML екранується", () => {
+  const t = wxText({ 12: [[0.5, 50, -3, 3], [0.5, 50, -2, 3], [0.5, 50, -3, 3]], 13: [[0.5, 50, 4, 3], [0.5, 50, 4, 3], [0.5, 50, 4, 3]] }, (() => { const d = fixture(); d.settings.city = "A<B&C"; return d; })());
+  assert.equal(t.split("\n")[0], "🌦 Пʼятниця, 13 листопада · A&lt;B&amp;C");
+  assert.equal(wxLines(t)[2], "12 🌨 −3° 0.5 мм  50%");
+  assert.equal(wxLines(t)[3], "13 🌧  4° 0.5 мм  50%");
+});
+
 
 // ---------- старі дані ----------
 test("старі дані без prio, poll, нових текстів — працюють", () => {

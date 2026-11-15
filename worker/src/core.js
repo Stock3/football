@@ -327,11 +327,17 @@ export function topupReply(C, pid) {
 
 // ---------- погода ----------
 // date — дата гри (кнопка 🌦 в опитуванні); без неї — найближча пʼятниця.
+// Погодинний вигляд (WX.hourly): шапка з датою, підсумок дня, рядки по годинах 10:00–23:00 у моноширинному блоці.
+// Повертає HTML для Telegram (parse_mode HTML; усе, що не наше, екранується) — index.js шле це з html:true.
+const hesc = (s) => String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+export { hesc };
 export function weatherReply(C, json, date) {
   if (!json) return "Прогноз зараз недоступний 🙈 Спробуй трохи пізніше.";
-  const S = C.S;
-  const w = WX.build(json, date || nextFriday(C.T), S.time, S.rainWarn, S.rainDry);
-  return WX.text(w, { city: S.city, verdicts: { dry: S.wxDry, rain: S.wxRain, warn: S.wxWarn } });
+  const S = C.S, d = date || nextFriday(C.T);
+  const w = WX.hourly(json, d, S.time);
+  if (!w.rows.length) return "Прогнозу на цю дату ще немає 🙈 Спробуй ближче до пʼятниці.";
+  return [hesc(WX.head({ date: d }, S.city)), hesc(w.summary), "<pre>" + hesc(w.lines.join("\n")) + "</pre>"].join("\n")
+    + (w.anyWarn ? "\n⚠️ — моделі розходяться" : "");
 }
 
 // ---------- 2. подяки за поповнення ----------
