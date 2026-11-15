@@ -8,6 +8,7 @@ import { fileURLToPath } from "node:url";
 import * as core from "../src/core.js";
 import worker from "../src/index.js";
 import { initGit } from "./gh-mock.mjs";
+import { BLOCKS } from "../sync.mjs";
 
 const dir = path.dirname(fileURLToPath(import.meta.url));
 const HTML = fs.readFileSync(path.join(dir, "..", "..", "index.html"), "utf8");
@@ -235,12 +236,13 @@ test("старі налаштування без нових полів прац�
   assert.equal(C.S.time, "21:00");
   assert.equal(core.reminders(C).msgs.length, 2);
 });
-for (const [tag, file] of [["WX", "wx.js"], ["BAL", "bal.js"]]) {
+for (const [tag, file] of BLOCKS) {
   test(`worker/src/${file} збігається з блоком /*${tag}*/ в index.html (інакше: node worker/sync.mjs)`, () => {
     const re = new RegExp("/\\*" + tag + "\\*/[\\s\\S]*?/\\*/" + tag + "\\*/");
-    const copy = fs.readFileSync(path.join(dir, "..", "src", file), "utf8").match(re);
+    const lf = (s) => s.replace(/\r\n/g, "\n");
+    const copy = lf(fs.readFileSync(path.join(dir, "..", "src", file), "utf8")).match(re);
     assert.ok(copy, `у src/${file} немає блоку`);
-    assert.equal(copy[0], HTML.match(re)[0]);
+    assert.equal(copy[0], lf(HTML).match(re)[0]);
   });
 }
 test("баланс на сайті й у боті — той самий код: блок BAL з index.html дає ті самі числа", () => {
