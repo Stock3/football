@@ -882,7 +882,14 @@
    "active": true,
    "phone": "+380 99 511 38 88",
    "tg": "mstrilec",
-   "prio": 7
+   "prio": 7,
+   "top": [
+    {
+     "id": "tmwhk7qf9hp0",
+     "d": "2026-11-13",
+     "a": 81
+    }
+   ]
   },
   {
    "id": "p7",
