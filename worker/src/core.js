@@ -214,10 +214,18 @@ export const MENU = {
 };
 const BTN_CMD = Object.fromEntries(Object.values(MENU).map(([t, c]) => [noVs(t), c]));
 // Клавіатура гравця; адміну (settings.org) — ще рядок «⚙️ Адмін»
-export const mainKb = (admin) => ({
-  keyboard: [[MENU.in[0], MENU.out[0]], [MENU.who[0], MENU.weather[0]], [MENU.balance[0], MENU.topup[0]], [MENU.stats[0], MENU.stop[0]], ...(admin ? [[MENU.admin[0]]] : [])].map((r) => r.map((text) => ({ text }))),
-  is_persistent: true, resize_keyboard: true,
-});
+// ЕКСПЕРИМЕНТ: «💳 Поповнити» внизу — web_app-кнопка (відкриває банку в Telegram одразу). Повернути звичайну кнопку: TOPUP_WEBAPP = false.
+const TOPUP_WEBAPP = true;
+const httpsUrl = (u) => (/^https:\/\/\S+$/.test(String(u || "").trim()) ? String(u).trim() : "");
+// C (необовʼязково) — для web_app-кнопки; без https-банку — звичайна текстова кнопка (→ /topup)
+export const mainKb = (admin, C) => {
+  const bank = TOPUP_WEBAPP && C && C.S ? httpsUrl(C.S.bank) : "";
+  const btn = (text) => (bank && text === MENU.topup[0] ? { text, web_app: { url: bank } } : { text });
+  return {
+    keyboard: [[MENU.in[0], MENU.out[0]], [MENU.who[0], MENU.weather[0]], [MENU.balance[0], MENU.topup[0]], [MENU.stats[0]], ...(admin ? [[MENU.admin[0]]] : [])].map((r) => r.map(btn)),
+    is_persistent: true, resize_keyboard: true,
+  };
+};
 // Інлайн-меню адміна (callback_data «adm:…» без «|» — щоб не плутатись із третьою частиною «гравець» у режимі тесту)
 export const adminKb = () => ({ inline_keyboard: [
   [{ text: "Почати опитування", callback_data: "adm:poll" }, { text: "Закрити опитування", callback_data: "adm:end" }],
@@ -276,7 +284,7 @@ export function onMessage(C, m, as) {
     // якщо в профілі вказано username, підключитися може лише ця людина
     if (p.tg && p.tg.toLowerCase() !== uname.toLowerCase()) return say(`Це посилання для гравця ${p.name} 🙂 Відкрий свій профіль на сайті.`);
     out.ops.push({ op: "link", pid: p.id, id: chatId, u: uname, at: C.now.toISOString() });
-    return say(fill(C.S.hello, { name: p.name, site: C.site }), mainKb(p.id === C.S.org)); // кнопки внизу чату — при підключенні
+    return say(fill(C.S.hello, { name: p.name, site: C.site }), mainKb(p.id === C.S.org, C)); // кнопки внизу чату — при підключенні
   }
   if (c === "/stop") {
     if (pid) out.ops.push({ op: "unlink", pid });

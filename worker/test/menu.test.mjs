@@ -17,6 +17,7 @@ const LATE = new Date("2026-11-12T21:30:00Z"); // четвер, 23:30 — тих
 const GID = "g20261113";
 const ADMIN = 101;
 const NAMES = ["Аня", "Борис", "Вова", "Гліб", "Дана", "Еля", "Женя", "Зоя", "Іра", "Їжак", "Йосип", "Кіра", "Богдан"];
+const KC = { S: { bank: "https://send.monobank.ua/jar/abc" } }; // контекст для клавіатури внизу (web_app-кнопка поповнення)
 const chat = (pid) => 100 + +pid.slice(1);
 // у всіх є бот, окрім Дани (p5); Богдан (p13) — неактивний, але підключений
 const allChats = () => Object.fromEntries(NAMES.map((n, i) => "p" + (i + 1)).filter((p) => p !== "p5").map((p) => [p, { id: chat(p), u: "" }]));
@@ -97,16 +98,16 @@ test("кнопка внизу = та сама команда: одна табл�
   assert.equal(core.onMessage(C, pm("хочу грати")).poll.t, "in");
 });
 
-test("/start: гравець — клавіатура 4 рядки; організатор — те саме + «⚙️ Адмін»; постійна й підганяється; /stop її прибирає", () => {
+test("/start: гравець — клавіатура 4 рядки без «Відписатися»; організатор — те саме + «⚙️ Адмін»; постійна й підганяється; /stop її прибирає", () => {
   const C = C0({ tg: {} });
   const rows = (r) => r.msgs[0].kb.keyboard.map((x) => x.map((b) => b.text));
   const p = core.onMessage(C, pm("/start p2", 555));
-  assert.deepEqual(rows(p), [["✅ Хочу грати", "❌ Не зможу"], ["👥 Хто йде", "🌦 Погода"], ["💰 Баланс", "💳 Поповнити"], ["📊 Статистика", "🔕 Відписатися"]]);
+  assert.deepEqual(rows(p), [["✅ Хочу грати", "❌ Не зможу"], ["👥 Хто йде", "🌦 Погода"], ["💰 Баланс", "💳 Поповнити"], ["📊 Статистика"]]);
   assert.equal(p.msgs[0].kb.is_persistent, true);
   assert.equal(p.msgs[0].kb.resize_keyboard, true);
   assert.match(p.msgs[0].text, /Привіт, Борис!/);
   const a = core.onMessage(C, pm("/start p1", 556));
-  assert.deepEqual(rows(a), [["✅ Хочу грати", "❌ Не зможу"], ["👥 Хто йде", "🌦 Погода"], ["💰 Баланс", "💳 Поповнити"], ["📊 Статистика", "🔕 Відписатися"], ["⚙️ Адмін"]]);
+  assert.deepEqual(rows(a), [["✅ Хочу грати", "❌ Не зможу"], ["👥 Хто йде", "🌦 Погода"], ["💰 Баланс", "💳 Поповнити"], ["📊 Статистика"], ["⚙️ Адмін"]]);
   // повторний /start уже підключеного — клавіатуру надсилає знову
   assert.ok(core.onMessage(C0(), pm("/start p2", 102)).msgs[0].kb.keyboard);
   assert.deepEqual(core.onMessage(C0(), pm("/stop", 102)).msgs[0].kb, { remove_keyboard: true });
@@ -283,10 +284,10 @@ test("розсилка несе клавіатуру внизу: гравцю �
   const got = w.sent.slice(before).filter((m) => m.text === "Текст розсилки");
   const flat = (m) => m.reply_markup.keyboard.flat().map((b) => b.text);
   const player = got.find((m) => m.chat_id === chat("p2"));
-  assert.deepEqual(player.reply_markup, core.mainKb(false));
+  assert.deepEqual(player.reply_markup, core.mainKb(false, KC));
   assert.ok(!flat(player).includes("⚙️ Адмін"));
   const org = got.find((m) => m.chat_id === ADMIN);
-  assert.deepEqual(org.reply_markup, core.mainKb(true));
+  assert.deepEqual(org.reply_markup, core.mainKb(true, KC));
   assert.ok(flat(org).includes("⚙️ Адмін"));
   assert.ok(got.every((m) => m.reply_markup && m.reply_markup.is_persistent));
 });
@@ -302,7 +303,7 @@ test("розсилка в режимі тесту: усе в чат адміна
   assert.ok(got.length > 1);
   for (const m of got) {
     assert.equal(m.chat_id, ADMIN);
-    assert.deepEqual(m.reply_markup, core.mainKb(true));
+    assert.deepEqual(m.reply_markup, core.mainKb(true, KC));
   }
   assert.ok(got.some((m) => m.text.startsWith("👤 для ")));
 });
@@ -493,4 +494,19 @@ test("режим тесту: /start адміна шле клавіатуру б�
   await say("/as Борис ✅ Хочу грати");
   assert.equal(last(w).text, "👤 для Борис:\nЗараз опитування немає");
   assert.equal(last(w).chat_id, ADMIN);
+});
+
+test("кнопка «💳 Поповнити» внизу: web_app з https-банком; без банку чи не https — звичайна текстова; «Відписатися» немає", () => {
+  const find = (kb) => kb.keyboard.flat().find((b) => b.text === "💳 Поповнити");
+  const C = C0({ tg: {} });
+  assert.deepEqual(find(core.onMessage(C, pm("/start p2", 555)).msgs[0].kb), { text: "💳 Поповнити", web_app: { url: "https://send.monobank.ua/jar/abc" } });
+  assert.deepEqual(find(core.mainKb(true, C)), { text: "💳 Поповнити", web_app: { url: "https://send.monobank.ua/jar/abc" } });
+  for (const bank of ["", "http://send.monobank.ua/jar/abc", "не посилання"]) {
+    const C2 = C0({ tg: {} }); C2.S.bank = bank;
+    assert.deepEqual(find(core.mainKb(false, C2)), { text: "💳 Поповнити" }, JSON.stringify(bank));
+  }
+  assert.deepEqual(find(core.mainKb(false)), { text: "💳 Поповнити" });
+  assert.ok(!JSON.stringify(core.mainKb(true, C)).includes("Відписатися"));
+  assert.equal(core.onMessage(C0(), pm("/stop", 102)).ops[0].op, "unlink", "/stop працює");
+  assert.equal(core.onMessage(C0(), pm("💳 Поповнити", 102)).msgs.length, 1, "старий текст кнопки → /topup");
 });

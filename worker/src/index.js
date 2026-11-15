@@ -98,7 +98,7 @@ function route(C, m) {
   const pid = m.pid || m.as;
   if (m.admin || !pid || pid === C.S.org) return { chat: A, text: m.text, kb: m.kb, html: m.html }; // уже адміну: без змін
   // розсилка в тесті: усе йде адміну, тож і клавіатура внизу — адмінська
-  return { chat: A, text: (m.html ? core.hesc(forLabel(C, pid)) : forLabel(C, pid)) + m.text, html: m.html, kb: m.bc ? core.mainKb(true) : tagKb(m.kb, pid) };
+  return { chat: A, text: (m.html ? core.hesc(forLabel(C, pid)) : forLabel(C, pid)) + m.text, html: m.html, kb: m.bc ? core.mainKb(true, C) : tagKb(m.kb, pid) };
 }
 async function deliver(env, C, m) {
   const d = route(C, m);

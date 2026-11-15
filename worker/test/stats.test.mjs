@@ -94,7 +94,7 @@ test("список: «Я» першим, далі лише активні за �
   assert.deepEqual(r.msgs[0].kb, kb);
   assert.deepEqual(core.onMessage(C0(), pm("/stats", 102)).msgs, r.msgs);
   assert.match(core.onMessage(C0(), pm("/stats", 999)).msgs[0].text, /не знаю/);
-  assert.deepEqual(core.mainKb(false).keyboard.at(-1).map((b) => b.text), ["📊 Статистика", "🔕 Відписатися"]);
+  assert.deepEqual(core.mainKb(false).keyboard.at(-1).map((b) => b.text), ["📊 Статистика"]);
 });
 
 // ---------- webhook з моками: редагування повідомлення, без комітів ----------

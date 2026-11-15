@@ -71,7 +71,7 @@ export function cb(X, ev, H) {
     if (bc.id !== c) return ans("Це застарілий перегляд — дивись останній");
     const ids = bc.ids.filter((pid) => chatFor(C, pid)); // хто встиг відключитись — вже без повідомлення
     // постійна клавіатура внизу — як у /start: ті, хто підключився до її появи, отримають її з розсилкою
-    for (const pid of ids) H.toP(X, pid, bc.text, mainKb(pid === C.S.org), { bc: true });
+    for (const pid of ids) H.toP(X, pid, bc.text, mainKb(pid === C.S.org, C), { bc: true });
     delete X.tg.bc; note();
     return edit(`📤 Розсилку надіслано: ${ids.length}\n${names(C, ids)}`);
   }

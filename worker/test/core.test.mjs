@@ -332,7 +332,7 @@ test("webhook: /weather — погодинний вигляд HTML з <pre> (par
   await quiet(() => c.done());
   const m = w.sent.find((x) => x.chat_id === 9999);
   assert.equal(m.parse_mode, "HTML");
-  assert.match(m.text, /^🌦 [^\n]+\n✅ Без опадів\n<pre>10 ☁️  5° 0.0 мм  20%\n/);
+  assert.match(m.text, /^🌦 [^\n]+\n✅ Удень сухо\n<pre>10 ☁️  5° 0.0 мм  20%\n/);
   assert.ok(m.text.endsWith("</pre>"));
   assert.equal(m.text.split("\n").length, 2 + 14, "шапка, підсумок і 14 рядків (перший у рядку <pre>)");
 });
