@@ -8,9 +8,14 @@
 //
 // Склад гри живе в data.json (c — «буде», y/b — команди, gy/gb — гості). У tg.json — лише стан опитування:
 // poll { game, open, startedAt, closedAt?, announced, short, empty?, queueFront: [pid], wait?: {pid: ISO},
-//        inv: { pid: { at, ans: "yes"|"no"|"later"|null, laterUntil?, remindedAt?, reason?, nobot?, msg? } } }
+//        inv: { pid: { at, ans: "yes"|"no"|"later"|null, laterUntil?, remindedAt?, reason?, nobot?, msg?, req?, reqTold? } } }
 //   inv — кого бот запрошував; announced — коли розіслано «Збір є»; short — після «Збір є» когось бракує;
-//   queueFront — передумали після «Не зможу», коли склад був повний: перші на наступне вільне місце;
+//   «День гри» — сьогодні (Київ) дата гри опитування.
+//   req — гравець сам попросився грати (/in, «↩️ Повернутися», «Передумав», «Буду»), коли склад був повний, і чекає місця
+//   (ans "no", місця не тримає). Не в день гри він чекає в черзі за prio — на тому ж місці, що й у запрошеннях;
+//   у день гри — у queueFront (за часом натискання), і ці гравці йдуть перед чергою за prio.
+//   reqTold — гравцю з черги вже сказано «Нас уже {count} ✅ … ти в черзі» (pollFull, один раз після «Збір є»).
+//   queueFront — попросились у день гри (у старих даних — і раніше): перші на наступне вільне місце;
 //   wait — після /out чекаємо причину; empty — організатору вже сказано, що черга закінчилась;
 //   inv.msg — id повідомлення з кнопками, на яке востаннє натиснув гравець (щоб /out і /in могли його відредагувати).
 //
@@ -23,8 +28,12 @@ import { fill, pick, nameOf, gameIds, gameVars, dmon, played, inQuiet, nextFrida
 
 export const REMIND_AFTER_H = 3;
 const H = 3600e3;
-const LATER = { l10: 10, l30: 30, l60: 60, l120: 120 };
-const LATER_LABEL = { 10: "10 хв", 30: "30 хв", 60: "1 год", 120: "2 год" };
+// «Скажу пізніше»: варіанти й за замовчуванням (хв); у день гри — коротші
+const LATER = { l10: 10, l15: 15, l30: 30, l60: 60, l120: 120 };
+const LATER_LABEL = { 10: "10 хв", 15: "15 хв", 30: "30 хв", 60: "1 год", 120: "2 год" };
+const LATER_OPTS = { day: [15, 30, 60], other: [10, 30, 60, 120] };
+const LATER_DEF = { day: 30, other: 120 };
+const SLACK = 5 * 60e3; // cron */15 спрацьовує з невеликим запізненням: інтервал нагадувань рахуємо з запасом
 const clone = (x) => JSON.parse(JSON.stringify(x));
 const cap = (s) => s.charAt(0).toUpperCase() + s.slice(1);
 
@@ -44,6 +53,10 @@ const inGame = (g, pid) => gameIds(g).includes(pid);
 const holds = (P, g, pid) => !inGame(g, pid) && !!P.inv[pid] && (P.inv[pid].ans == null || P.inv[pid].ans === "later");
 const holders = (P, g) => Object.keys(P.inv).filter((pid) => holds(P, g, pid));
 const free = (X, g) => need(X.C) - count(g) - holders(X.P, g).length;
+export const isGameDay = (C, g) => !!g && C.T.date === g.date;
+// Чекають місця: самі попросились (req), не в грі й місця не тримають
+const waiting = (P, g, pid) => !!P.inv[pid] && !!P.inv[pid].req && !inGame(g, pid) && !holds(P, g, pid);
+const unqueue = (P, pid) => { P.queueFront = P.queueFront.filter((x) => x !== pid); if (P.inv[pid]) { delete P.inv[pid].req; delete P.inv[pid].reqTold; } };
 
 // Дата гри для опитування: найближча пʼятниця; у пʼятницю після часу гри — наступна.
 export function pollDate(C) {
@@ -54,10 +67,11 @@ const pastGame = (C, g) => C.T.date > g.date || (C.T.date === g.date && C.T.time
 
 // Групи для /who і сайту
 export function groups(g, P) {
-  const r = { yes: gameIds(g), no: [], later: [], wait: [], nobot: [] };
+  const r = { yes: gameIds(g), queue: [], no: [], later: [], wait: [], nobot: [] };
   for (const [pid, x] of Object.entries((P && P.game === g.id && P.inv) || {})) {
     if (r.yes.includes(pid) || x.ans === "yes") continue;
-    if (x.ans === "no") r.no.push(pid);
+    if (x.ans === "no" && x.req) r.queue.push(pid);
+    else if (x.ans === "no") r.no.push(pid);
     else if (x.ans === "later") r.later.push(pid);
     else if (x.nobot) r.nobot.push(pid);
     else r.wait.push(pid);
@@ -71,6 +85,7 @@ export function whoText(C, g, P) {
   return [
     `⚽ ${day}, ${dmon(g.date)}, ${gameTime(C.S)} — ${count(g)}/${need(C)}` + (P && P.game === g.id && !P.open ? " (опитування закрито)" : ""),
     `✅ Буде (${G.yes.length + guests}): ${G.yes.length || !guests ? nm(G.yes) : ""}${guests ? `${G.yes.length ? " + " : ""}${guests} ${guests === 1 ? "гість" : guests < 5 ? "гості" : "гостей"}` : ""}`,
+    ...(G.queue.length ? [`🔁 Чекає місця (${G.queue.length}): ${nm(G.queue)}`] : []),
     `❌ Не зможе (${G.no.length}): ${nm(G.no)}`,
     `🕐 Скаже пізніше (${G.later.length}): ${nm(G.later)}`,
     `⏳ Не відповів (${G.wait.length}): ${nm(G.wait)}`,
@@ -85,7 +100,7 @@ export const inviteKb = (gid) => kb([[["✅ Буду", "y|" + gid], ["❌ Не �
 const changedKb = (gid) => kb([[["🔄 Передумав", "c|" + gid], ["🌦 Погода", "w|" + gid]]]);
 // після виходу зі складу: дія r — це «хочу грати», а не «передумав»: якщо гравець уже в грі, вона нічого не скасовує
 const backKb = (gid) => kb([[["↩️ Повернутися в гру", "r|" + gid], ["🌦 Погода", "w|" + gid]]]);
-const laterKb = (gid) => kb([Object.entries(LATER).map(([k, m]) => [LATER_LABEL[m], k + "|" + gid])]);
+const laterKb = (gid, day) => kb([LATER_OPTS[day ? "day" : "other"].map((m) => [LATER_LABEL[m], "l" + m + "|" + gid])]);
 
 // ---------- крок ----------
 export function step(C, ev) {
@@ -151,6 +166,7 @@ const target = (X, pid, m) => {
   return inv && inv.msg != null && ch ? { chat: ch.id, msg: inv.msg } : null;
 };
 const quiet = (X) => inQuiet(X.C.T.time, S(X).remind.quiet);
+const mins = (t) => +t.slice(0, 2) * 60 + +t.slice(3, 5);
 
 function closeIf(X) {
   const P = X.P;
@@ -164,13 +180,16 @@ function closeIf(X) {
 }
 
 // Запросити наступних із черги на вільні місця. Повертає імена запрошених.
+// Порядок: queueFront (попросились у день гри), далі черга за prio — і ще не запрошені, і ті, хто сам попросився (req),
+// разом з неактивними, що попросились самі (/in).
 function fillSlots(X, g) {
-  const P = X.P, out = [], q = queue(X.D.players);
+  const P = X.P, out = [];
+  const q = X.D.players.filter((p) => p.active !== false || (P.inv[p.id] && P.inv[p.id].req)).sort(byPrio).map((p) => p.id);
   let f = free(X, g);
   while (f > 0) {
     let pid = P.queueFront.find((p) => !inGame(g, p) && !holds(P, g, p));
     if (pid) P.queueFront = P.queueFront.filter((x) => x !== pid);
-    else pid = q.find((p) => !inGame(g, p) && !P.inv[p]);
+    else pid = q.find((p) => !inGame(g, p) && (!P.inv[p] || waiting(P, g, p)));
     if (!pid) break;
     P.inv[pid] = { at: X.now, ans: null };
     if (!invite(X, g, pid, "pollInvite")) markNobot(X, pid);
@@ -193,7 +212,7 @@ function reconcile(X, g) {
   for (const [pid, inv] of Object.entries(X.P.inv)) {
     const inG = inGame(g, pid);
     if (inv.ans === "yes" && !inG) out(X, g, pid, "", "site");
-    else if (inG && inv.ans !== "yes") { inv.ans = "yes"; delete inv.laterUntil; delete inv.nobot; X.P.queueFront = X.P.queueFront.filter((x) => x !== pid); }
+    else if (inG && inv.ans !== "yes") { inv.ans = "yes"; delete inv.laterUntil; delete inv.nobot; unqueue(X.P, pid); }
   }
 }
 
@@ -208,6 +227,7 @@ function announceCheck(X, g) {
     g.ann = { ...(g.ann || {}), gather: X.now };
     X.tail.push(`🎉 Зібрано ${n}/${N} — розіслано «Збір є»`);
     X.notes.push("збір є"); X.dnotes.push("збір є");
+    tellQueue(X, g);
     return;
   }
   if (X.left.length && n < N) {
@@ -219,6 +239,20 @@ function announceCheck(X, g) {
     P.short = false;
     X.tail.push(`✅ Знову ${n}/${N} — усім надіслано склад`);
   }
+  if (gathered(X, g)) tellQueue(X, g);
+}
+// «Збір є» розіслано, і склад досі повний
+const gathered = (X, g) => !!X.P.announced && !X.P.short && count(g) >= need(X.C);
+// Тим, хто сам попросився й чекає місця, — один раз «Нас уже {count} ✅ … ти в черзі» (без номера в черзі)
+function tellQueue(X, g) {
+  const told = [];
+  for (const pid of Object.keys(X.P.inv)) {
+    const inv = X.P.inv[pid];
+    if (!waiting(X.P, g, pid) || inv.reqTold) continue;
+    inv.reqTold = X.now;
+    if (toP(X, pid, fill(pick(X.C, S(X).pollFull), pv(X, g, pid)))) told.push(nameOf(X.C, pid));
+  }
+  if (told.length) { X.tail.push("🔁 Черзі сказано, що склад зібрано: " + told.join(", ")); X.notes.push("черзі сказано"); }
 }
 
 // ---------- відповіді ----------
@@ -234,7 +268,7 @@ function yes(X, g, pid, m, back) {
   }
   const inv = (P.inv[pid] ??= { at: X.now, ans: null });
   inv.ans = "yes"; delete inv.laterUntil; delete inv.nobot;
-  P.queueFront = P.queueFront.filter((x) => x !== pid);
+  unqueue(P, pid);
   edit(X, target(X, pid, m), say(X, "inGame", { count: count(g), need: N }), changedKb(g.id));
   toP(X, pid, fill(pick(X.C, S(X).pollYes), pv(X, g, pid)));
   X.head.push(back ? `↩️ ${name} повернувся (${count(g)}/${N})` : `✅ ${name} — буде (${count(g)}/${N})`);
@@ -250,24 +284,35 @@ function comeBack(X, g, pid, m) {
   }
   yes(X, g, pid, m, true);
 }
+// Склад повний, а гравець просить місце. Не в день гри — чекає в черзі за prio (req), у день гри — у кінці queueFront.
+// Після «Збір є» відповідь — «Нас уже {count} ✅ … ти в черзі» (pollFull), інакше — say.full. Номер у черзі гравцю не кажемо.
 function full(X, g, pid, m, back) {
-  const P = X.P;
-  if (P.inv[pid] || !back) { // незапрошений, що сам попросився (/in), у «Не зможе» не потрапляє — він лише в черзі
-    P.inv[pid] = { ...(P.inv[pid] || { at: X.now }), ans: "no" };
-    delete P.inv[pid].laterUntil;
-  }
-  if (!P.queueFront.includes(pid)) P.queueFront.push(pid);
+  const P = X.P, day = isGameDay(X.C, g), name = nameOf(X.C, pid);
+  const inv = (P.inv[pid] = { ...(P.inv[pid] || { at: X.now }), ans: "no" }); // ans "no" + req: місця не тримає, у /who — «Чекає місця»
+  delete inv.laterUntil;
+  inv.req ??= X.now;
+  if (day) { if (!P.queueFront.includes(pid)) P.queueFront.push(pid); }
+  else P.queueFront = P.queueFront.filter((x) => x !== pid);
+  const told = gathered(X, g);
+  const text = told ? fill(pick(X.C, S(X).pollFull), pv(X, g, pid)) : say(X, "full");
+  if (told) inv.reqTold = X.now;
   if (X.answer) X.answer.text = "Вже повний склад";
   const t = target(X, pid, m);
-  if (t) edit(X, t, say(X, "full"), back ? backKb(g.id) : changedKb(g.id));
-  if (!m) toP(X, pid, say(X, "full")); // команда /in: відповідь окремим повідомленням
-  X.head.push(back ? `↩️ ${nameOf(X.C, pid)} хоче грати — перший у черзі` : `🔁 ${nameOf(X.C, pid)} хоче грати, але склад повний — перший у черзі`);
-  X.notes.push(nameOf(X.C, pid) + " у черзі");
+  if (t) edit(X, t, text, back ? backKb(g.id) : changedKb(g.id));
+  if (!m) toP(X, pid, text); // команда /in: відповідь окремим повідомленням
+  const where = day ? `у черзі дня гри (№${P.queueFront.indexOf(pid) + 1})` : "у черзі за пріоритетом";
+  X.head.push(back ? `↩️ ${name} хоче грати — ${where}` : `🔁 ${name} хоче грати, але склад повний — ${where}`);
+  X.notes.push(name + " у черзі");
 }
 function no(X, g, pid, m) {
   const P = X.P, inv = (P.inv[pid] ??= { at: X.now, ans: null }), name = nameOf(X.C, pid);
   if (inGame(g, pid) || inv.ans === "yes") return out(X, g, pid, "", "changed", m);
-  if (inv.ans === "no") { if (X.answer) X.answer.text = "Уже записав: не зможеш"; edit(X, m, say(X, "skipped"), changedKb(g.id)); return; }
+  if (inv.ans === "no") { // хто чекав місця й натиснув «Не зможу» (стара кнопка) — більше не в черзі
+    if (inv.req || P.queueFront.includes(pid)) { unqueue(P, pid); X.head.push(`❌ ${name} — більше не чекає місця`); X.notes.push(name + " не зможе"); }
+    if (X.answer) X.answer.text = "Уже записав: не зможеш";
+    edit(X, m, say(X, "skipped"), changedKb(g.id));
+    return;
+  }
   inv.ans = "no"; delete inv.laterUntil;
   edit(X, m, say(X, "skipped"), changedKb(g.id));
   toP(X, pid, fill(pick(X.C, S(X).pollNo), pv(X, g, pid)));
@@ -279,9 +324,10 @@ function later(X, g, pid, m) {
   const inv = (X.P.inv[pid] ??= { at: X.now, ans: null }), name = nameOf(X.C, pid);
   if (inGame(g, pid)) { X.answer.text = "Ти вже в грі ✅"; return; }
   if (inv.ans === "no") { X.answer.text = "Натисни «Передумав», якщо зможеш"; return; }
-  inv.ans = "later"; inv.laterUntil = new Date(X.C.now.getTime() + 2 * H).toISOString();
-  edit(X, m, say(X, "laterAsk"), laterKb(g.id));
-  X.head.push(`🕐 ${name} — відповість пізніше (за замовчуванням через 2 год)`);
+  const day = isGameDay(X.C, g), mins = LATER_DEF[day ? "day" : "other"];
+  inv.ans = "later"; inv.laterUntil = new Date(X.C.now.getTime() + mins * 60e3).toISOString();
+  edit(X, m, say(X, day ? "laterAskDay" : "laterAsk"), laterKb(g.id, day));
+  X.head.push(`🕐 ${name} — відповість пізніше (за замовчуванням через ${LATER_LABEL[mins]})`);
   X.notes.push(name + " пізніше");
 }
 function laterSet(X, g, pid, mins, m) {
@@ -383,6 +429,7 @@ const HANDLERS = {
     const pid = c[0], inv = X.P.inv[pid];
     if (inGame(g, pid) || (inv && inv.ans === "yes")) { out(X, g, pid, "", "admin"); return; }
     inv.ans = "no"; delete inv.laterUntil; delete inv.nobot;
+    unqueue(X.P, pid); // організатор каже «не зможе» — з черги теж прибираємо
     const invd = fillSlots(X, g);
     X.head.push(`❌ ${nameOf(X.C, pid)} — не зможе (відмітив організатор)` + arrow(invd));
     X.notes.push(nameOf(X.C, pid) + " не зможе");
@@ -401,12 +448,19 @@ const HANDLERS = {
     if (!X.P) return;
     for (const pid of ev.pids || []) { const inv = X.P.inv[pid]; if (inv && inv.ans == null && !inv.nobot) markNobot(X, pid); }
   },
+  // Усе тут — за розкладом. Не в день гри: чекає кінця тихих годин, мовчазним — одне нагадування через 3 год.
+  // У день гри: тихі години не діють; з poll.dayFrom мовчазним (ans null) — нагадування кожні poll.dayEvery хв,
+  // поки не відповіли, організатор не відмітив (/no, сайт) або склад не зібрано; «пізніше» теж чекає dayFrom.
   tick(X) {
-    if (quiet(X)) return; // усе тут — за розкладом, тож чекає кінця тихих годин
-    if (S(X).poll.auto) autoStart(X);
+    const q = quiet(X);
+    if (!q && S(X).poll.auto) autoStart(X);
     const g = game(X);
     if (!X.P || !X.P.open || !g) return;
-    const now = X.C.now.getTime();
+    const day = isGameDay(X.C, g), p = S(X).poll;
+    if (day ? X.C.T.time < p.dayFrom : q) return;
+    const now = X.C.now.getTime(), every = p.dayEvery * 60e3;
+    const from = now - (mins(X.C.T.time) - mins(p.dayFrom)) * 60e3; // dayFrom сьогодні, мс
+    const reminded = [];
     for (const [pid, inv] of Object.entries(X.P.inv)) {
       if (inGame(g, pid)) continue;
       const name = nameOf(X.C, pid);
@@ -414,12 +468,20 @@ const HANDLERS = {
         inv.ans = null; inv.at = X.now; delete inv.laterUntil;
         if (invite(X, g, pid, "pollInvite")) X.head.push(`🕐 ${name} — перепитав`); else markNobot(X, pid);
         X.notes.push(name + " перепитано");
+      } else if (day) {
+        if (inv.ans != null || inv.nobot || count(g) >= need(X.C)) continue; // склад зібрано — не смикаємо
+        // перше нагадування — о dayFrom (або через dayEvery після запрошення), далі — кожні dayEvery
+        const last = Math.max(Date.parse(inv.at), inv.remindedAt ? Date.parse(inv.remindedAt) : 0, from - every);
+        if (now - last < every - SLACK) continue;
+        inv.remindedAt = X.now;
+        if (invite(X, g, pid, "pollRemind")) reminded.push(name); else markNobot(X, pid);
       } else if (inv.ans == null && !inv.nobot && !inv.remindedAt && now - Date.parse(inv.at) >= REMIND_AFTER_H * H) {
         inv.remindedAt = X.now;
         if (invite(X, g, pid, "pollRemind")) X.head.push(`⏳ ${name} не відповів ${REMIND_AFTER_H} год — нагадав`); else markNobot(X, pid);
         X.notes.push(name + " нагадано");
       }
     }
+    if (reminded.length) { X.head.push(`⏳ День гри, нагадав: ${reminded.join(", ")}`); X.notes.push("нагадано " + reminded.join(", ")); }
   },
 };
 

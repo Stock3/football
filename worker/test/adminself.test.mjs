@@ -129,9 +129,10 @@ test("адмін: «Буду» → «Передумав» (вихід) → «П�
   b = mark(w);
   await press("r|" + GID, ADMIN, INVMID);
   noError(w);
-  // місце вже віддали наступному з черги → Аня перша в черзі (за вільного місця було б «повернулась»)
-  assert.ok(tgState(w).poll.queueFront.includes("p1"));
-  assert.ok(toAdmin(w, b).some((x) => x.includes("Аня хоче грати")), JSON.stringify(toAdmin(w, b)));
+  // місце вже віддали наступному з черги → Аня чекає місця (не день гри — у черзі за prio, не в queueFront)
+  assert.ok(tgState(w).poll.inv.p1.req);
+  assert.ok(!tgState(w).poll.queueFront.includes("p1"));
+  assert.ok(toAdmin(w, b).some((x) => x.includes("Аня хоче грати — у черзі за пріоритетом")), JSON.stringify(toAdmin(w, b)));
 });
 
 test("адмін: «Скажу пізніше» → вибір часу", async (t) => {

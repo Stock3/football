@@ -350,7 +350,7 @@ var DEF = /*DEF*/{
  "postD":[
   "🤝 {name}, нічия {score} — нікому не прикро!\nСписано {charge} грн за гру {date} · баланс {balance} грн"
  ],
- "poll":{"auto":false,"day":4,"time":"11:00","need":10},
+ "poll":{"auto":false,"day":4,"time":"11:00","need":10,"dayFrom":"09:00","dayEvery":30},
  "pollInvite":[
   "⚽ {name}, {day}, {date}, о {time} — футбол ({place}). Нас уже {count}/{need}. Ти з нами?",
   "📣 {name}, збираємо склад на {day}, {date}, {time}. Зараз {count}/{need}. Будеш?"
@@ -373,6 +373,9 @@ var DEF = /*DEF*/{
  "pollBack":[
   "✅ Знову {count}, склад: {list}. До зустрічі на полі!"
  ],
+ "pollFull":[
+  "Нас уже {count} ✅ Не сумуй — ти в черзі, напишу, якщо звільниться місце"
+ ],
  "rainDry":40,
  "wxDry":"✅ Схоже, зіграємо сухими",
  "wxRain":"☔ Можливий дощ",
@@ -386,8 +389,9 @@ var DEF = /*DEF*/{
   "outOk":"Добре, викреслив. Якщо щось зміниться — пиши 🙂",
   "inGame":"Ти в грі ✅ ({count}/{need})",
   "skipped":"Ти пропускаєш цю гру ❌",
-  "full":"Вже повний склад, ти перший у черзі — напишу, якщо звільниться місце",
+  "full":"Вже повний склад, ти в черзі — напишу, якщо звільниться місце",
   "laterAsk":"Коли перепитати? Якщо не вибереш — через 2 год",
+  "laterAskDay":"Коли перепитати? Якщо не вибереш — через 30 хв",
   "laterOk":"Добре, перепитаю через {after} 🕐"
  }
 }/*/DEF*/;
@@ -831,14 +835,15 @@ function planView(g){
 }
 /* опитування «хто йде» (стан у tg.json, пише бот): ✅ 7 · ❌ 2 · 🕐 1 · ⏳ 0 · 📵 1 з іменами; групи — як у worker/src/poll.js */
 function pollGroups(g,P){
-  var r={yes:gameIds(g),no:[],later:[],wait:[],nobot:[]}, inv=(P&&P.game===g.id&&P.inv)||{};
+  var r={yes:gameIds(g),queue:[],no:[],later:[],wait:[],nobot:[]}, inv=(P&&P.game===g.id&&P.inv)||{};
   Object.keys(inv).forEach(function(id){var x=inv[id]; if(r.yes.indexOf(id)>=0||x.ans==="yes")return;
-    if(x.ans==="no")r.no.push(id); else if(x.ans==="later")r.later.push(id); else if(x.nobot)r.nobot.push(id); else r.wait.push(id);});
+    if(x.ans==="no"&&x.req)r.queue.push(id); else if(x.ans==="no")r.no.push(id); else if(x.ans==="later")r.later.push(id); else if(x.nobot)r.nobot.push(id); else r.wait.push(id);});
   return r;
 }
 function pollSum(g){
   var P=TG.poll; if(!P||P.game!==g.id)return "";
-  var G=pollGroups(g,P), K=[["yes","✅","буде"],["no","❌","не зможе"],["later","🕐","скаже пізніше"],["wait","⏳","не відповів"],["nobot","📵","без бота"]];
+  var G=pollGroups(g,P), K=[["yes","✅","буде"],["queue","🔁","чекає місця"],["no","❌","не зможе"],["later","🕐","скаже пізніше"],["wait","⏳","не відповів"],["nobot","📵","без бота"]];
+  if(!G.queue.length)K.splice(1,1);
   var top=K.map(function(k){return '<span title="'+k[2]+'">'+k[1]+' '+(k[0]==="yes"?gameCount(g):G[k[0]].length)+'</span>';}).join(" · ");
   var det=K.slice(1).filter(function(k){return G[k[0]].length;}).map(function(k){return k[1]+' '+esc(G[k[0]].map(pname).join(", "));}).join(" · ");
   return '<p class="pollsum num">'+top+(P.open?'':' <span class="note">· опитування закрито</span>')+'</p>'+(det?'<p class="note pollnames">'+det+'</p>':'');
@@ -1257,7 +1262,9 @@ function settingsView(){
     '<div class="three"><label class="field">День запуску<select id="s-pday">'+WD.map(function(d,i){return '<option value="'+(i+1)+'"'+(+s.poll.day===i+1?" selected":"")+'>'+d+'</option>';}).join("")+'</select></label>'+
     '<label class="field">Час запуску<input type="time" step="900" id="s-ptime" value="'+esc(s.poll.time)+'"></label>'+
     '<label class="field">Скільки треба людей<input type="number" min="2" max="30" id="s-pneed" value="'+esc(s.poll.need)+'"></label></div>'+
-    '<p class="note">Організатор (поле в розділі «Оплата») з підключеним ботом отримує звіт про кожну подію й керує командами /poll, /endpoll, /no Імʼя. Автозапуск і нагадування чекають кінця тихих годин. Підстановки: {name} {day} {date} {time} {place} {count} {need} {list} {site}; після гри: {name} {date} {score} (рахунок з боку гравця) {verdict} {charge} (списано за гру) {balance} (баланс після списання). Кілька варіантів — через рядок <b>---</b></p>'+
+    '<div class="two"><label class="field">У день гри нагадувати з<input type="time" step="900" id="s-pdfrom" value="'+esc(s.poll.dayFrom)+'"></label>'+
+    '<label class="field">кожні, хв<input type="number" min="15" max="240" step="15" id="s-pdevery" value="'+esc(s.poll.dayEvery)+'"></label></div>'+
+    '<p class="note">Організатор (поле в розділі «Оплата») з підключеним ботом отримує звіт про кожну подію й керує командами /poll, /endpoll, /no Імʼя. Автозапуск і нагадування чекають кінця тихих годин. У день гри тихі години не діють: хто не відповів (або «пізніше» минуло), отримує нагадування з указаного часу кожні N хв, поки не відповість, ти не відмітиш його (/no чи на сайті) або склад не збереться; «Скажу пізніше» в день гри — 15 / 30 / 60 хв (за замовчуванням 30). Хто просить місце при повному складі, чекає в черзі за порядком гравців, а в день гри — за часом натискання, перед рештою черги. Підстановки: {name} {day} {date} {time} {place} {count} {need} {list} {site}; після гри: {name} {date} {score} (рахунок з боку гравця) {verdict} {charge} (списано за гру) {balance} (баланс після списання). Кілька варіантів — через рядок <b>---</b></p>'+
     POLLT.map(function(k){return ta("s-"+k[0],k[1],s[k[0]],k[2],4);}).join("")+
     '<details><summary class="note">Короткі фрази бота</summary><div class="stack" style="padding-top:10px">'+
     SAYK.map(function(k){return '<label class="field">'+esc(k[1])+'<input type="text" id="s-say-'+k[0]+'" value="'+esc(s.say[k[0]]||"")+'"></label>';}).join("")+'</div></details></div>'+
@@ -1289,20 +1296,22 @@ function readSets(){
   s.city=v("s-city").trim(); s.lat=num("s-lat",s.lat); s.lon=num("s-lon",s.lon); s.rainWarn=Math.min(100,Math.max(1,Math.round(num("s-warn",90)))); s.sinoptik=v("s-sin").trim(); s.meteo=v("s-met").trim(); s.gather=splitT(v("s-gather")); s.cancel=splitT(v("s-cancel"));
   s.verdicts={w:splitT(v("s-vw")),l:splitT(v("s-vl")),d:splitT(v("s-vd"))};
   var pt=v("s-ptime")||"";
-  s.poll={auto:document.getElementById("s-pauto").checked,day:+v("s-pday")||4,time:hm(pt)||pt,need:Math.round(num("s-pneed",10))};
-  s.poll._bad=!hm(pt);
+  var pdf=v("s-pdfrom")||"";
+  s.poll={auto:document.getElementById("s-pauto").checked,day:+v("s-pday")||4,time:hm(pt)||pt,need:Math.round(num("s-pneed",10)),dayFrom:hm(pdf)||pdf,dayEvery:Math.round(num("s-pdevery",30))};
+  s.poll._bad=!hm(pt); s.poll._badDay=!hm(pdf);
   POLLT.forEach(function(k){s[k[0]]=splitT(v("s-"+k[0]));});
   s.rainDry=Math.round(num("s-dry",40)); s.wxDry=v("s-wxdry").trim(); s.wxRain=v("s-wxrain").trim(); s.wxWarn=v("s-wxwarn").trim();
   var say={}; SAYK.forEach(function(k){say[k[0]]=v("s-say-"+k[0]).trim()||DEF.say[k[0]];}); s.say=say;
 }
 /* тексти опитування й підсумку гри: [ключ, підпис, підказка] */
-var POLLT=[["pollInvite","Запрошення","кнопки ✅ Буду · ❌ Не зможу · 🕐 Скажу пізніше · 🌦 Погода додаються самі"],["pollRemind","Нагадування, якщо мовчить 3 год",""],
+var POLLT=[["pollInvite","Запрошення","кнопки ✅ Буду · ❌ Не зможу · 🕐 Скажу пізніше · 🌦 Погода додаються самі"],["pollRemind","Нагадування, якщо мовчить (3 год; у день гри — кожні N хв)",""],
   ["pollYes","Відповідь на «Буду»",""],["pollNo","Відповідь на «Не зможу»","сумно або смішно"],
   ["pollShort","Усім, коли після «Збір є» хтось скасував","{who} — хто скасував"],["pollBack","Усім, коли знову набралось","{list} — склад"],
+  ["pollFull","Тим, хто чекає в черзі, коли склад зібрано (один раз; і одразу, якщо просяться після «Збір є»)","{count} — скільки нас; номер у черзі не показується"],
   ["postW","Після гри: перемога",""],["postL","Після гри: поразка",""],["postD","Після гри: нічия",""]];
 var SAYK=[["adminOnly","Не організатор натиснув /poll чи /endpoll"],["closed","Кнопка після закриття опитування"],["noPoll","Опитування не йде"],["notIn","/out, але гравця немає в складі"],
   ["askReason","/out: запит причини"],["outOk","/out: підтвердження"],["inGame","Запрошення після «Буду» ({count} {need})"],["skipped","Запрошення після «Не зможу»"],
-  ["full","Передумав або хоче повернутися (кнопка, /in), а склад повний"],["laterAsk","«Скажу пізніше»: коли перепитати"],["laterOk","«Скажу пізніше»: підтвердження ({after})"]];
+  ["full","Передумав або хоче повернутися (кнопка, /in), а склад повний (до «Збір є»)"],["laterAsk","«Скажу пізніше»: коли перепитати"],["laterAskDay","«Скажу пізніше» в день гри: коли перепитати"],["laterOk","«Скажу пізніше»: підтвердження ({after})"]];
 function saveSets(){
   readSets(); var s=ui.sets;
   if(!s.thanks.length||!s.reminders.length){toast("Потрібен хоча б один текст подяки й нагадування");return;}
@@ -1319,13 +1328,15 @@ function saveSets(){
   var pl=s.poll;
   if(pl._bad){toast("Опитування: час запуску у форматі ГГ:ХХ");return;}
   if(!(pl.need>=2&&pl.need<=30)){toast("Опитування: скільки треба людей — від 2 до 30");return;}
-  var need=["pollInvite","pollRemind","pollYes","pollNo","pollShort","pollBack","postW","postL","postD"];
+  if(pl._badDay){toast("Опитування: час нагадувань у день гри у форматі ГГ:ХХ");return;}
+  if(!(pl.dayEvery>=15&&pl.dayEvery<=240)){toast("Опитування: нагадування в день гри — кожні 15–240 хв");return;}
+  var need=["pollInvite","pollRemind","pollYes","pollNo","pollShort","pollBack","pollFull","postW","postL","postD"];
   for(var i=0;i<need.length;i++)if(!s[need[i]].length){toast("Потрібен хоча б один варіант кожного тексту опитування й підсумку гри");return;}
   if(!(s.rainDry>=1&&s.rainDry<=100)){toast("Погода: поріг «сухо» від 1 до 100 %");return;}
   ui.timesRaw=null;
   /* не губити поля налаштувань, яких форма не знає */
   var old=S.settings||{}; s=Object.assign({},old,s); s.remind=Object.assign({},old.remind||{},r); delete s.remind._bad;
-  s.poll=Object.assign({},old.poll||{},pl); delete s.poll._bad; s.say=Object.assign({},old.say||{},s.say);
+  s.poll=Object.assign({},old.poll||{},pl); delete s.poll._bad; delete s.poll._badDay; s.say=Object.assign({},old.say||{},s.say);
   save(function(){return {v:S.v,settings:s,players:S.players,games:S.games};},"Налаштування збережено","Налаштування оплати й бота");
 }
 

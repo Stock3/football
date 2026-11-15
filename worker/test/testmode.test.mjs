@@ -369,3 +369,63 @@ test("testMode вимкнено: /balance реальному гравцю — у
   assert.equal(w.sent.at(-1).chat_id, chat("p3"));
   assert.deepEqual(urlBtn(w.sent.at(-1)).map((b) => b.url), [BANK]);
 });
+
+// ---------- день гри в режимі тесту ----------
+const FRI = (hm) => new Date(`2026-11-13T${String(+hm.slice(0, 2) - 2).padStart(2, "0")}:${hm.slice(3)}:00Z`); // Київ = UTC+2
+const tagged = (w, from, name) => w.sent.slice(from).filter((m) => m.text.startsWith("👤 для " + name));
+test("testMode, день гри: /as Імʼя /in при повному складі → queueFront; «Збір є» → «Нас уже 10» йому — усе в чат адміна", async (t) => {
+  clock(t, FRI("10:00"));
+  const w = mockWorld();
+  await say("/poll"); // гра сьогодні; запрошено p1…p10 — усі тримають місця
+  let b = mark(w);
+  await say("/as Кіра /in");
+  assert.deepEqual(tgState(w).poll.queueFront, ["p12"]);
+  assert.ok(tgState(w).poll.inv.p12.req);
+  assert.deepEqual(tagged(w, b, "Кіра").map((m) => m.text), ["👤 для Кіра:\n" + DEF.say.full]);
+  assert.ok(lastTo(w, b).some((x) => /Кіра хоче грати — у черзі дня гри \(№1\)/.test(x)));
+  await say("/as Йосип /in");
+  assert.deepEqual(tgState(w).poll.queueFront, ["p12", "p11"]);
+  b = mark(w);
+  await press("y|" + GID);
+  for (const n of ["Борис", "Вова", "Гліб", "Дана", "Еля", "Женя", "Зоя", "Іра", "Їжак"]) await press(btn(w, n, "Буду"));
+  assert.ok(tgState(w).poll.announced);
+  for (const n of ["Кіра", "Йосип"]) assert.deepEqual(tagged(w, b, n).map((m) => m.text), [`👤 для ${n}:\nНас уже 10 ✅ Не сумуй — ти в черзі, напишу, якщо звільниться місце`]);
+  // після збору — одразу та сама відповідь
+  b = mark(w);
+  await say("/as Богдан /in");
+  assert.deepEqual(tagged(w, b, "Богдан").map((m) => m.text), ["👤 для Богдан:\nНас уже 10 ✅ Не сумуй — ти в черзі, напишу, якщо звільниться місце"]);
+  // звільнилось місце → першою з queueFront Кіра
+  b = mark(w);
+  await say("/as Борис /out"); await say("/as Борис /skip");
+  assert.ok(tagged(w, b, "Кіра").some((m) => m.reply_markup && btn(w, "Кіра", "Буду") === "y|" + GID + "|p12"), "Кірі — запрошення з її кнопками");
+  assert.deepEqual(w.sent.filter((m) => m.chat_id !== ADMIN), []);
+});
+test("testMode, день гри: нагадування кожні 30 хв з 09:00 (тихі години не діють) і «пізніше» 15/30/60 — у чат адміна з кнопками гравця", async (t) => {
+  clock(t, THU);
+  const w = mockWorld();
+  setData(w, (d) => { d.settings.remind.quiet = { from: "22:00", to: "11:00" }; });
+  await say("/poll");
+  await press(btn(w, "Борис", "Буду"));
+  t.mock.timers.setTime(FRI("09:00").getTime());
+  let b = mark(w);
+  await cron();
+  const rem = w.sent.slice(b).filter((m) => /ще чекаю відповідь/.test(m.text));
+  assert.ok(rem.length >= 8, "нагадування мовчазним о 09:00, хоч тихі години до 11:00");
+  assert.ok(rem.every((m) => m.chat_id === ADMIN));
+  assert.ok(!rem.some((m) => m.text.startsWith("👤 для Борис")), "Борис відповів");
+  assert.ok(rem.find((m) => m.text.startsWith("👤 для Вова")).reply_markup.inline_keyboard.flat().some((x) => x.callback_data === "y|" + GID + "|p3"));
+  t.mock.timers.setTime(FRI("09:15").getTime());
+  b = mark(w); await cron();
+  assert.equal(w.sent.slice(b).filter((m) => /ще чекаю/.test(m.text)).length, 0);
+  t.mock.timers.setTime(FRI("09:30").getTime());
+  b = mark(w); await cron();
+  assert.ok(w.sent.slice(b).filter((m) => /ще чекаю/.test(m.text)).length >= 8);
+  // «Скажу пізніше» в день гри
+  await press(btn(w, "Вова", "пізніше"), ADMIN, 42);
+  const ed = w.tgCalls.filter((x) => x.method === "editMessageText").at(-1).body;
+  assert.equal(ed.text, "👤 для Вова:\nКоли перепитати? Якщо не вибереш — через 30 хв");
+  assert.deepEqual(ed.reply_markup.inline_keyboard.flat().map((x) => [x.text, x.callback_data]), [["15 хв", "l15|" + GID + "|p3"], ["30 хв", "l30|" + GID + "|p3"], ["1 год", "l60|" + GID + "|p3"]]);
+  await press("l15|" + GID + "|p3", ADMIN, 42);
+  assert.equal(tgState(w).poll.inv.p3.laterUntil, FRI("09:45").toISOString());
+  assert.deepEqual(w.sent.filter((m) => m.chat_id !== ADMIN), []);
+});

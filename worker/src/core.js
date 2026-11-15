@@ -46,13 +46,16 @@ export function normRemind(src, DEF) {
   r.after = +r.after || 0; r.every = Math.max(1, +r.every || 1); r.max = Math.max(1, +r.max || 1);
   return r;
 }
-// Опитування: auto — запуск за розкладом; day — 1 = Пн … 7 = Нд; time — "HH:MM"; need — скільки треба людей.
+// Опитування: auto — запуск за розкладом; day — 1 = Пн … 7 = Нд; time — "HH:MM"; need — скільки треба людей;
+// dayFrom / dayEvery — у день гри нагадувати мовчазним з dayFrom кожні dayEvery хв (тихі години в день гри не діють).
 export function normPoll(src, DEF) {
   const p = { ...((DEF && DEF.poll) || {}), ...(src || {}) };
   p.auto = p.auto === true;
   p.day = +p.day >= 1 && +p.day <= 7 ? +p.day : 4;
   p.time = hm(p.time) || "11:00";
   p.need = Math.max(2, Math.round(+p.need) || 10);
+  p.dayFrom = hm(p.dayFrom) || "09:00";
+  p.dayEvery = Math.min(240, Math.max(15, Math.round(+p.dayEvery) || 30));
   return p;
 }
 export function pad2(n) { return String(n).padStart(2, "0"); }
@@ -340,6 +343,7 @@ export function postGame(C, gid) {
 // ---------- 3. нагадування ----------
 // Тихі години (Налаштування → Telegram-бот) діють лише на повідомлення за розкладом:
 // нагадування про оплату, нагадування в опитуванні, «скажу пізніше», автозапуск опитування.
+// У день гри нагадування й «пізніше» в опитуванні тихих годин не зважають (poll.js, tick).
 export const inQuiet = (t, q) => !!(q && q.from && q.to && q.from !== q.to) && (q.from < q.to ? t >= q.from && t < q.to : t >= q.from || t < q.to);
 
 // Слоти розкладу, що вже настали сьогодні й ще не оброблені. Cron може спрацювати із запізненням,

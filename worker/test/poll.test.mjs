@@ -171,17 +171,18 @@ test("«Передумав» після «Буду» — як /out; після �
   assert.deepEqual(G(W).c, []);
   assert.match(adm(r), /^🚫 Борис скасував → запрошено: /);
   assert.equal(to(r, "p2")[0].text, "Добре, викреслив. Якщо щось зміниться — пиши 🙂");
-  // склад повний (місце Бориса вже тримає новий запрошений) → у голову черги
+  // склад повний (місце Бориса вже тримає новий запрошений) → чекає в черзі за prio (не день гри)
   r = press(W, "p2", "c");
   assert.equal(r.answer.text, "Вже повний склад");
   assert.equal(r.edits[0].text, DEF.say.full);
-  assert.deepEqual(P(W).queueFront, ["p2"]);
-  assert.match(adm(r), /Борис хоче грати, але склад повний — перший у черзі/);
-  // хтось відмовився → першим запрошують Бориса, а не наступного з черги
+  assert.deepEqual(P(W).queueFront, []);
+  assert.ok(P(W).inv.p2.req);
+  assert.match(adm(r), /Борис хоче грати, але склад повний — у черзі за пріоритетом/);
+  // хтось відмовився → Борис (prio вище за ще не запрошених) отримує місце
   r = press(W, "p3", "n");
   assert.match(adm(r), /❌ Вова — не зможе → запрошено: Борис$/);
   assert.equal(P(W).inv.p2.ans, null);
-  assert.deepEqual(P(W).queueFront, []);
+  assert.equal(P(W).inv.p2.req, undefined);
   // «Передумав» після «Не зможу», коли місце є
   const W2 = world(); say(W2, "/poll", "p1");
   press(W2, "p3", "n"); // місце Вови тепер у наступного; звільнимо ще одне через /endpoll? ні — через «не зможу» останнього в черзі
@@ -448,7 +449,10 @@ test("старі дані без prio, poll, нових текстів — пр�
   say(W, "/poll", "p1");
   assert.deepEqual(invited(W), ["p1", "p2", "p3", "p4", "p5", "p6", "p7", "p8", "p9", "p10"]); // за імʼям
   const C = ctxOf(W);
-  assert.deepEqual(C.S.poll, { auto: false, day: 4, time: "11:00", need: 10 });
+  assert.deepEqual(C.S.poll, { auto: false, day: 4, time: "11:00", need: 10, dayFrom: "09:00", dayEvery: 30 });
+  // старий poll у data.json без нових полів
+  const d2 = fixture(); d2.settings.poll = { auto: true, day: 3, time: "10:00", need: 8 };
+  assert.deepEqual(ctxOf(world({ data: d2 })).S.poll, { auto: true, day: 3, time: "10:00", need: 8, dayFrom: "09:00", dayEvery: 30 });
   assert.equal(C.S.say.closed, "Опитування вже закрито");
   assert.deepEqual(core.normState({ chats: {} }), { chats: {}, sent: {}, slots: [] });
 });
@@ -463,7 +467,7 @@ function smallWorld(need) {
   return world({ data, tg: { chats } });
 }
 const kbData = (m) => m.kb.inline_keyboard.flat().map((b) => [b.text, b.callback_data]);
-const FULL_TEXT = "Вже повний склад, ти перший у черзі — напишу, якщо звільниться місце";
+const FULL_TEXT = "Вже повний склад, ти в черзі — напишу, якщо звільниться місце";
 
 test("↩️ після «Передумав»: кнопка «Повернутися в гру» → знову «Буду» з {count}/{need}, звіт організатору", () => {
   const W = smallWorld(); say(W, "/poll", "p1");
@@ -513,37 +517,46 @@ test("/in: вільне місце — навіть для того, кого н
   assert.deepEqual(G(W).c, ["p13"]);
   assert.equal(to(again, "p13")[0].text, "Ти в грі ✅ (1/10)");
 });
-test("/in: склад повний → перший у черзі (queueFront), відповідь і звіт; звільнилось місце — запрошують першим", () => {
-  const W = world(); startFull(W); // 9 у складі + Дана без бота тримає місце
+test("/in не в день гри: склад повний → чекає в черзі за prio (не queueFront), відповідь і звіт; звільнилось місце — за prio", () => {
+  const W = world(); startFull(W); // 9 у складі + Дана без бота тримає місце; не запрошені — p9 (Іра), p10 (Їжак)
   assert.equal(G(W).c.length, 9);
   const r = say(W, "/in", "p10"); // Їжак — далеко в черзі, його ще не запрошували
-  assert.equal(P(W).inv.p10, undefined, "Їжака не запрошували");
+  assert.deepEqual({ ans: P(W).inv.p10.ans, req: !!P(W).inv.p10.req }, { ans: "no", req: true });
   assert.deepEqual(G(W).c.includes("p10"), false);
-  assert.deepEqual(P(W).queueFront, ["p10"]);
-  assert.equal(to(r, "p10")[0].text, FULL_TEXT);
-  assert.equal(adm(r), "↩️ Їжак хоче грати — перший у черзі");
-  // повторний /in не дублює чергу
-  say(W, "/in", "p10");
-  assert.deepEqual(P(W).queueFront, ["p10"]);
-  // хтось скасував → місце першим дістається Їжаку
-  say(W, "/out", "p2");
-  const o = say(W, "/skip", "p2");
   assert.deepEqual(P(W).queueFront, []);
+  assert.equal(to(r, "p10")[0].text, FULL_TEXT);
+  assert.equal(adm(r), "↩️ Їжак хоче грати — у черзі за пріоритетом");
+  assert.match(say(W, "/who", "p3").msgs[0].text, /🔁 Чекає місця \(1\): Їжак/);
+  // повторний /in нічого не дублює
+  say(W, "/in", "p10");
+  assert.deepEqual(P(W).queueFront, []);
+  // хтось скасував → місце за prio: Іра (вище в черзі, не просилась) раніше за Їжака
+  say(W, "/out", "p2");
+  let o = say(W, "/skip", "p2");
+  assert.match(adm(o), /запрошено: Іра$/);
+  assert.equal(P(W).inv.p10.ans, "no");
+  // ще один скасував → тепер Їжак
+  say(W, "/out", "p3");
+  o = say(W, "/skip", "p3");
+  assert.match(adm(o), /запрошено: Їжак$/);
   assert.equal(P(W).inv.p10.ans, null);
-  assert.match(adm(o), /запрошено: Їжак/);
+  assert.equal(P(W).inv.p10.req, undefined);
   assert.ok(to(o, "p10").some((m) => m.inv === "p10"));
 });
-test("↩️ кнопка «Повернутися» при повному складі: перший у черзі, повідомлення редагується", () => {
+test("↩️ кнопка «Повернутися» при повному складі (не день гри): у черзі за prio — перша, бо prio 1; повідомлення редагується", () => {
   const W = world(); startFull(W);
   press(W, "p12", "c"); // Кіра передумала й вийшла; її місце одразу запрошене наступному
   assert.equal(G(W).c.includes("p12"), false);
   const r = press(W, "p12", "r");
   assert.equal(G(W).c.includes("p12"), false);
-  assert.ok(P(W).queueFront.includes("p12"));
+  assert.ok(!P(W).queueFront.includes("p12"));
   assert.equal(r.answer.text, "Вже повний склад");
   assert.equal(r.edits[0].text, FULL_TEXT);
   assert.deepEqual(r.edits[0].kb.inline_keyboard.flat().map((b) => b.callback_data), ["r|" + GID, "w|" + GID]);
-  assert.equal(adm(r), "↩️ Кіра хоче грати — перший у черзі");
+  assert.equal(adm(r), "↩️ Кіра хоче грати — у черзі за пріоритетом");
+  // Кіра (prio 1) раніше за ще не запрошеного Їжака
+  press(W, "p2", "c");
+  assert.equal(P(W).inv.p12.ans, null);
 });
 test("/in без опитування й після його закриття — «Зараз опитування немає» / кнопка «закрито»; невідомому — підказка", () => {
   const W = smallWorld();
