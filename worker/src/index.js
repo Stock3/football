@@ -111,7 +111,7 @@ function routeEdit(C, e) {
   const A = core.adminChat(C);
   if (A == null || e.chat !== A) return null;
   if (!e.pid || e.pid === C.S.org) return e;
-  return { ...e, text: forLabel(C, e.pid) + e.text, kb: tagKb(e.kb, e.pid) };
+  return { ...e, text: (e.html ? core.hesc(forLabel(C, e.pid)) : forLabel(C, e.pid)) + e.text, kb: tagKb(e.kb, e.pid) };
 }
 
 // ---------- опитування ----------
@@ -145,7 +145,7 @@ async function pollRun(env, ev) {
     await safe("Telegram editMessageText", async () => {
       const e = routeEdit(C, e0);
       if (!e) return;
-      try { await tgCall(env, "editMessageText", { chat_id: e.chat, message_id: e.msg, text: e.text, ...(e.kb ? { reply_markup: e.kb } : {}), ...(e.nopv ? { link_preview_options: { is_disabled: true } } : {}) }); }
+      try { await tgCall(env, "editMessageText", { chat_id: e.chat, message_id: e.msg, text: e.text, ...(e.html ? { parse_mode: "HTML" } : {}), ...(e.kb ? { reply_markup: e.kb } : {}), ...(e.nopv ? { link_preview_options: { is_disabled: true } } : {}) }); }
       catch (err) { if (!/not modified/i.test(err.message)) throw err; }
     });
   }

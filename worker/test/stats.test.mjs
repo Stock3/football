@@ -36,51 +36,78 @@ function fixture() {
 }
 const C0 = (data = fixture()) => core.context({ data, DEF, tg: { chats: { p1: { id: 101 }, p2: { id: 102 } } }, now: NOW, site: SITE, rand: () => 0 });
 
-test("картка: сезон за замовчуванням — останній рік із зіграною грою; усі розділи", () => {
+const kbRows = (kb) => kb.inline_keyboard.map((row) => row.map((b) => b.callback_data || b.url));
+
+test("картка: сезон за замовчуванням, усі розділи, HTML, кнопки", () => {
   const r = stats.card(C0(), "p1");
+  assert.equal(r.html, true);
   assert.equal(r.text, [
-    "📊 Аня · #8 · Сезон 2026",
-    "Ігор 4 · 2–1–1 · 7 очок · 50% перемог",
-    "Місце: 1-е з 6 за очками · 1-е за %В",
-    "+/− за гру: +0.5 · відвідуваність 100%",
-    "Форма: 🟥⬜🟩🟩 (серія: 2 перемоги поспіль, найдовша: 2 перемоги)",
-    "🟡 За жовтих: 2 · 0–1–1 · 0%",
-    "🔵 За синіх: 2 · 2–0–0 · 100%",
-    "💪 Найчастіше обігрує: Гліб (2 з 3), Дана (2 з 3)",
-    "🎯 Віхи: до 10-ї гри — 5, до 10-ї перемоги — 7",
-    "Останні: 27.03 🔵 2:0 🟩 · 20.03 🔵 3:1 🟩 · 13.03 🟡 5:5 ⬜",
-    "🔗 " + SITE + "#p1",
+    "📊 <b>Аня</b> · #8",
+    "Сезон 2026",
+    "",
+    "🏆 1-е за очками · 1-е за %В",
+    "Ігор <b>4</b> · <b>2–1–1</b> · <b>7</b> очок",
+    "Перемог <b>50%</b> · +/− <b>+0.5</b>",
+    "Відвідуваність <b>100%</b>",
+    "",
+    "<b>Форма</b>  🟥⬜🟩🟩",
+    "Серія: 2 перемоги · рекорд 2 перемоги",
+    "",
+    "<b>Останні ігри</b>",
+    "27.03  🔵 2:0",
+    "20.03  🔵 3:1",
+    "13.03  🟡 5:5",
+    "",
+    "<b>Кольори</b>  🟡 <b>0–1–1</b>  ·  🔵 <b>2–0–0</b>",
+    "",
+    "<b>Суперники</b>",
+    "💪 Гліб 2/3 · Дана 2/3",
+    "",
+    "<b>Віхи</b>",
+    "🎯 10-та гра — ще 5",
+    "🎯 10-та перемога — ще 7",
   ].join("\n"));
-  // 😬 немає: усім суперникам Аня програвала рідше, ніж вигравала — розділ без даних не показуємо
-  assert.ok(!r.text.includes("😬"));
-  assert.deepEqual(r.kb.inline_keyboard.map((row) => row.map((b) => [b.text, b.callback_data])), [
-    [["2025", "st:p1:2025"], ["• 2026", "st:p1:2026"], ["Весь час", "st:p1:all"]],
-    [["← Інший гравець", "st:l"]],
-  ]);
+  assert.ok(!r.text.includes("😬") && !r.text.includes("http"), "розділ без даних не показується; сирого посилання немає");
+  assert.ok(r.text.split("\n").every((l) => l.replace(/<\/?b>/g, "").length <= 40));
+  assert.deepEqual(kbRows(r.kb), [["st:p1:2025", "st:p1:2026", "st:p1:all"], [SITE + "#p1"], ["st:l"]]);
+  assert.deepEqual(r.kb.inline_keyboard.map((row) => row.map((b) => b.text)), [["2025", "• 2026", "Весь час"], ["🌐 Профіль на сайті"], ["← Інший гравець"]]);
+  assert.equal(r.kb.inline_keyboard[1][0].callback_data, undefined, "кнопка сайту — URL");
 });
 
-test("картка: весь час проти сезону", () => {
+test("картка: «—» для кольору без ігор; весь час проти сезону; без сайту — без кнопки профілю", () => {
+  assert.match(stats.card(C0(), "p4", "2026").text, /<b>Кольори<\/b>  🟡 <b>\d+–\d+–\d+<\/b>  ·  🔵 <b>/);
+  const only = fixture(); only.games = only.games.filter((x) => x.date !== "2026-03-06" && x.date !== "2026-03-13");
+  assert.match(stats.card(C0(only), "p1", "2026").text, /<b>Кольори<\/b>  🟡 —  ·  🔵 <b>2–0–0<\/b>/);
   const all = stats.card(C0(), "p1", "all").text.split("\n");
-  assert.equal(all[0], "📊 Аня · #8 · Весь час");
-  assert.equal(all[1], "Ігор 5 · 3–1–1 · 10 очок · 60% перемог");
-  assert.ok(all[4].startsWith("Форма: 🟩🟥⬜🟩🟩 "), all[4]); // останні 5 — разом із грою 2025 року
-  const y25 = stats.card(C0(), "p1", "2025").text.split("\n");
-  assert.equal(y25[0], "📊 Аня · #8 · Сезон 2025");
-  assert.equal(y25[1], "Ігор 1 · 1–0–0 · 3 очки · 100% перемог");
-  assert.equal(y25[2], "Місце: 1-е з 6 за очками · за %В — від 3 ігор"); // замало ігор у сезоні для %В
-  assert.ok(!y25.some((l) => l.startsWith("💪")), "суперники — від 3 ігор");
-  assert.equal(stats.card(C0(), "p1", "2025").kb.inline_keyboard[0][0].text, "• 2025");
-  // невідомий рік → сезон за замовчуванням
-  assert.match(stats.card(C0(), "p1", "1999").text, /^📊 Аня · #8 · Сезон 2026/);
+  assert.deepEqual(all.slice(0, 2), ["📊 <b>Аня</b> · #8", "Весь час"]);
+  assert.equal(all[4], "Ігор <b>5</b> · <b>3–1–1</b> · <b>10</b> очок");
+  assert.ok(all.some((l) => l.startsWith("<b>Форма</b>  🟩🟥⬜🟩🟩")));
+  const y25 = stats.card(C0(), "p1", "2025");
+  assert.deepEqual(y25.text.split("\n").slice(0, 5), ["📊 <b>Аня</b> · #8", "Сезон 2025", "", "🏆 1-е за очками · %В — від 3 ігор", "Ігор <b>1</b> · <b>1–0–0</b> · <b>3</b> очки"]);
+  assert.ok(!y25.text.includes("Суперники"), "суперники — від 3 ігор");
+  assert.equal(y25.kb.inline_keyboard[0][0].text, "• 2025");
+  assert.match(stats.card(C0(), "p1", "1999").text, /^📊 <b>Аня<\/b> · #8\nСезон 2026/);
+  const noSite = core.context({ data: fixture(), DEF, tg: { chats: {} }, now: NOW, site: "", rand: () => 0 });
+  assert.deepEqual(kbRows(stats.card(noSite, "p1").kb), [["st:p1:2025", "st:p1:2026", "st:p1:all"], ["st:l"]]);
 });
 
-test("картка: гравець без ігор — лише шапка, «ще не грав» і посилання", () => {
-  assert.equal(stats.card(C0(), "p8").text, ["📊 Зоя · Сезон 2026", "У цьому періоді ще не грав.", "🔗 " + SITE + "#p8"].join("\n"));
-  // грав раніше, але не в цьому сезоні: віхи за весь час лишаються
+test("картка: гравець без ігор у періоді — «ще не грав» і Віхи; зовсім без ігор — лише шапка", () => {
+  assert.equal(stats.card(C0(), "p8").text, ["📊 <b>Зоя</b>", "Сезон 2026", "", "У цьому періоді ще не грав"].join("\n"));
   const data = fixture(); data.games = data.games.filter((x) => x.date < "2026");
   data.games.push(g("2026-02-06", ["p2"], ["p3"], 1, 0));
-  const t = stats.card(C0(data), "p1", "2026").text.split("\n");
-  assert.deepEqual(t.slice(0, 3), ["📊 Аня · #8 · Сезон 2026", "У цьому періоді ще не грав.", "🎯 Віхи: до 10-ї гри — 9, до 10-ї перемоги — 9"]);
+  assert.equal(stats.card(C0(data), "p1", "2026").text, [
+    "📊 <b>Аня</b> · #8", "Сезон 2026", "", "У цьому періоді ще не грав", "", "<b>Віхи</b>", "🎯 10-та гра — ще 9", "🎯 10-та перемога — ще 9",
+  ].join("\n"));
+});
+
+test("картка: імʼя з «<» і «&» екранується, теґів не ламає", () => {
+  const data = fixture(); data.players[0].name = "A<b>&Co"; data.players[3].name = "<i>Гліб&";
+  const t = stats.card(C0(data), "p1").text;
+  assert.ok(t.startsWith("📊 <b>A&lt;b&gt;&amp;Co</b> · #8\n"), t);
+  assert.ok(!t.includes("<i>") && !/<b>&Co/.test(t));
+  assert.ok(t.includes("💪 &lt;i&gt;Гліб&amp; 2/3"), "імена суперників теж");
+  const bad = fixture(); bad.players[0].num = "<8>";
+  assert.ok(stats.card(C0(bad), "p1").text.startsWith("📊 <b>Аня</b> · #&lt;8&gt;"));
 });
 
 test("список: «Я» першим, далі лише активні за імʼям, по 2 в рядку", () => {
@@ -136,12 +163,13 @@ test("webhook: «📊 Статистика» → список → картка �
   await press("st:p1");
   let e = edits(w).at(-1);
   assert.equal(e.message_id, 77);
-  assert.match(e.text, /^📊 Аня · #8 · Сезон 2026\nІгор 4/);
+  assert.match(e.text, /^📊 <b>Аня<\/b> · #8\nСезон 2026\n\n🏆 1-е за очками/);
   assert.deepEqual(e.link_preview_options, { is_disabled: true });
+  assert.equal(e.parse_mode, "HTML");
   assert.ok(w.tgCalls.some((c) => c.method === "answerCallbackQuery"), "callback має відповідь");
 
   await press("st:p1:all");
-  assert.match(edits(w).at(-1).text, /^📊 Аня · #8 · Весь час/);
+  assert.match(edits(w).at(-1).text, /^📊 <b>Аня<\/b> · #8\nВесь час/);
   await press("st:l");
   e = edits(w).at(-1);
   assert.equal(e.text, stats.LIST_TEXT);
@@ -162,8 +190,10 @@ test("webhook, режим тесту: адмін дивиться статист
   assert.equal(m.reply_markup.inline_keyboard[0][0].callback_data, "st:p2|p2");
   await press("st:p2|p2", 101);
   const e = edits(w).at(-1);
-  assert.match(e.text, /^👤 для Борис:\n📊 Борис · Сезон 2026/);
-  assert.equal(e.reply_markup.inline_keyboard[1][0].callback_data, "st:l|p2");
+  assert.match(e.text, /^👤 для Борис:\n📊 <b>Борис<\/b>\nСезон 2026/);
+  assert.equal(e.parse_mode, "HTML");
+  assert.equal(e.reply_markup.inline_keyboard.at(-1)[0].callback_data, "st:l|p2");
+  assert.equal(e.reply_markup.inline_keyboard.at(-2)[0].url, SITE + "#p2", "кнопка сайту без змін у тесті");
   await press("st:p1", 102); // реальний гравець під час тесту — нічого
   assert.equal(edits(w).length, 1);
 });
