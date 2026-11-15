@@ -27,6 +27,7 @@
 //   гравця третьою частиною callback_data «дія|гра|гравець»). Події не з чату адміна ігноруються.
 import { fill, pick, nameOf, gameIds, gameVars, dmon, played, inQuiet, nextFriday, addDays, gameTime, DAYS, chatFor, testOn, testBlocked, bcActive } from "./core.js";
 import * as admin from "./admin.js";
+import * as stats from "./stats.js";
 
 export const REMIND_AFTER_H = 3;
 const H = 3600e3;
@@ -114,9 +115,11 @@ export function step(C, ev) {
   };
   X.pid = Object.keys(tg.chats).find((k) => tg.chats[k].id === ev.chat) || null;
   X.as = null;
-  // режим тесту: адмін діє від імені гравця — ev.as (/as) або третя частина callback_data
+  // режим тесту: адмін діє від імені гравця — ev.as (/as) або остання частина callback_data
+  // («дія|гра|гравець»; у кнопок без гри — «adm:…», «bc:…», «st:…» — це «дія|гравець»)
   if (testOn(C) && !testBlocked(C, ev.chat) && ev.chat != null) {
-    const tag = ev.t === "cb" ? String(ev.data || "").split("|")[2] : "";
+    const parts = ev.t === "cb" ? String(ev.data || "").split("|") : [];
+    const tag = /^(adm|bc|st):/.test(parts[0] || "") ? parts[1] : parts[2];
     const as = ev.as || tag;
     if (as && C.players[as]) { X.as = as; X.pid = as; }
   }
@@ -161,7 +164,8 @@ function toP(X, pid, text, markup, extra) {
   X.msgs.push({ chat: ch.id, pid, name: nameOf(X.C, pid), text, kb: markup, ...(extra || {}) });
   return true;
 }
-const edit = (X, m, text, markup) => { if (m && m.chat != null && m.msg != null) X.edits.push({ chat: m.chat, msg: m.msg, text, kb: markup || null, ...(X.as ? { pid: X.as } : {}) }); };
+// extra: {nopv: true} — без прев’ю посилань (картка статистики)
+const edit = (X, m, text, markup, extra) => { if (m && m.chat != null && m.msg != null) X.edits.push({ chat: m.chat, msg: m.msg, text, kb: markup || null, ...(X.as ? { pid: X.as } : {}), ...(extra || {}) }); };
 // Що редагувати: повідомлення, на яке натиснули; для команд (/out, /in) — останнє повідомлення гравця з кнопками
 const target = (X, pid, m) => {
   if (m) return m;
@@ -395,6 +399,7 @@ const HANDLERS = {
   cb(X, ev) {
     const [a, gid] = String(ev.data || "").split("|");
     if (/^(adm|bc):/.test(a)) return admin.cb(X, ev, HOOK);
+    if (/^st:/.test(a)) return stats.cb(X, ev, edit); // статистика — будь-кому, без змін стану
     if (a === "w") { const wg = X.D.games.find((x) => x.id === gid); X.weather = { chat: ev.chat, date: wg && !played(wg) ? wg.date : null, ...(X.as ? { as: X.as } : {}) }; return; }
     if (!X.pid) { X.answer.text = "Я тебе ще не знаю 🙂 Натисни /start"; return; }
     const g = game(X);

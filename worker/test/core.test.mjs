@@ -439,7 +439,7 @@ test("/setup: ключ, webhook з секретом, команди; /health", a
   const sw = w.tgCalls.find((x) => x.method === "setWebhook").body;
   assert.deepEqual(sw, { url: "https://bot.shtuchka.workers.dev/tg", secret_token: SECRET, allowed_updates: ["message", "callback_query"], drop_pending_updates: false });
   // /poll і /endpoll — лише для організатора, у публічному меню їх немає
-  assert.deepEqual(w.tgCalls.find((x) => x.method === "setMyCommands").body.commands.map((c) => c.command), ["who", "in", "out", "balance", "topup", "weather", "stop"]);
+  assert.deepEqual(w.tgCalls.find((x) => x.method === "setMyCommands").body.commands.map((c) => c.command), ["who", "in", "out", "balance", "topup", "weather", "stats", "stop"]);
   const h = await worker.fetch(req("/health"), env, ctxMock());
   assert.equal(await h.text(), "ok");
   assert.equal((await worker.fetch(req("/nope"), env, ctxMock())).status, 404);

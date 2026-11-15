@@ -145,7 +145,7 @@ async function pollRun(env, ev) {
     await safe("Telegram editMessageText", async () => {
       const e = routeEdit(C, e0);
       if (!e) return;
-      try { await tgCall(env, "editMessageText", { chat_id: e.chat, message_id: e.msg, text: e.text, ...(e.kb ? { reply_markup: e.kb } : {}) }); }
+      try { await tgCall(env, "editMessageText", { chat_id: e.chat, message_id: e.msg, text: e.text, ...(e.kb ? { reply_markup: e.kb } : {}), ...(e.nopv ? { link_preview_options: { is_disabled: true } } : {}) }); }
       catch (err) { if (!/not modified/i.test(err.message)) throw err; }
     });
   }
@@ -242,6 +242,7 @@ async function setup(url, env) {
     { command: "balance", description: "Мій баланс" },
     { command: "topup", description: "Поповнити баланс" },
     { command: "weather", description: "Погода на пʼятницю" },
+    { command: "stats", description: "Статистика гравців" },
     { command: "stop", description: "Не писати мені" },
   ] });
   try {

@@ -75,7 +75,7 @@ const strip = (r) => JSON.stringify({ msgs: r.msgs, ops: r.ops, poll: r.poll, we
 
 test("кнопка внизу = та сама команда: одна таблиця, однаковий результат (з емодзі-селектором і без)", () => {
   const C = C0();
-  const table = { "✅ Хочу грати": "/in", "❌ Не зможу": "/out", "👥 Хто йде": "/who", "🌦 Погода": "/weather", "💰 Баланс": "/balance", "💳 Поповнити": "/topup", "🔕 Відписатися": "/stop" };
+  const table = { "✅ Хочу грати": "/in", "❌ Не зможу": "/out", "👥 Хто йде": "/who", "🌦 Погода": "/weather", "💰 Баланс": "/balance", "💳 Поповнити": "/topup", "🔕 Відписатися": "/stop", "📊 Статистика": "/stats" };
   for (const [btn, cmd] of Object.entries(table)) {
     assert.equal(strip(core.onMessage(C, pm(btn))), strip(core.onMessage(C, pm(cmd))), btn);
     assert.equal(strip(core.onMessage(C, pm(btn.replace(" ", "️ ")))), strip(core.onMessage(C, pm(cmd))), btn + " з селектором");
@@ -101,12 +101,12 @@ test("/start: гравець — клавіатура 4 рядки; органі
   const C = C0({ tg: {} });
   const rows = (r) => r.msgs[0].kb.keyboard.map((x) => x.map((b) => b.text));
   const p = core.onMessage(C, pm("/start p2", 555));
-  assert.deepEqual(rows(p), [["✅ Хочу грати", "❌ Не зможу"], ["👥 Хто йде", "🌦 Погода"], ["💰 Баланс", "💳 Поповнити"], ["🔕 Відписатися"]]);
+  assert.deepEqual(rows(p), [["✅ Хочу грати", "❌ Не зможу"], ["👥 Хто йде", "🌦 Погода"], ["💰 Баланс", "💳 Поповнити"], ["📊 Статистика", "🔕 Відписатися"]]);
   assert.equal(p.msgs[0].kb.is_persistent, true);
   assert.equal(p.msgs[0].kb.resize_keyboard, true);
   assert.match(p.msgs[0].text, /Привіт, Борис!/);
   const a = core.onMessage(C, pm("/start p1", 556));
-  assert.deepEqual(rows(a), [["✅ Хочу грати", "❌ Не зможу"], ["👥 Хто йде", "🌦 Погода"], ["💰 Баланс", "💳 Поповнити"], ["🔕 Відписатися", "⚙️ Адмін"]]);
+  assert.deepEqual(rows(a), [["✅ Хочу грати", "❌ Не зможу"], ["👥 Хто йде", "🌦 Погода"], ["💰 Баланс", "💳 Поповнити"], ["📊 Статистика", "🔕 Відписатися"], ["⚙️ Адмін"]]);
   // повторний /start уже підключеного — клавіатуру надсилає знову
   assert.ok(core.onMessage(C0(), pm("/start p2", 102)).msgs[0].kb.keyboard);
   assert.deepEqual(core.onMessage(C0(), pm("/stop", 102)).msgs[0].kb, { remove_keyboard: true });

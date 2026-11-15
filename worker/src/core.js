@@ -7,6 +7,7 @@
 // Опитування «хто йде» (tg.poll і склад гри в data.json) — окремо, у poll.js.
 import { WX } from "./wx.js";
 import { BAL } from "./bal.js";
+import * as stats from "./stats.js";
 
 export { WX, BAL };
 export const THANKS_WINDOW_DAYS = 21; // не дякувати за давні ігри (напр. коли людина підключила бота пізніше)
@@ -209,12 +210,12 @@ const toPlayer = (C, pid, text, ops, kb) => ({ chat: chatFor(C, pid).id, pid, na
 const noVs = (s) => String(s).replace(/️/g, "").trim(); // клієнти можуть додавати чи губити селектор варіанта емодзі
 export const MENU = {
   in: ["✅ Хочу грати", "/in"], out: ["❌ Не зможу", "/out"], who: ["👥 Хто йде", "/who"], weather: ["🌦 Погода", "/weather"],
-  balance: ["💰 Баланс", "/balance"], topup: ["💳 Поповнити", "/topup"], stop: ["🔕 Відписатися", "/stop"], admin: ["⚙️ Адмін", "/admin"],
+  balance: ["💰 Баланс", "/balance"], topup: ["💳 Поповнити", "/topup"], stats: ["📊 Статистика", "/stats"], stop: ["🔕 Відписатися", "/stop"], admin: ["⚙️ Адмін", "/admin"],
 };
 const BTN_CMD = Object.fromEntries(Object.values(MENU).map(([t, c]) => [noVs(t), c]));
-// Клавіатура гравця; адміну (settings.org) — ще «⚙️ Адмін»
+// Клавіатура гравця; адміну (settings.org) — ще рядок «⚙️ Адмін»
 export const mainKb = (admin) => ({
-  keyboard: [[MENU.in[0], MENU.out[0]], [MENU.who[0], MENU.weather[0]], [MENU.balance[0], MENU.topup[0]], admin ? [MENU.stop[0], MENU.admin[0]] : [MENU.stop[0]]].map((r) => r.map((text) => ({ text }))),
+  keyboard: [[MENU.in[0], MENU.out[0]], [MENU.who[0], MENU.weather[0]], [MENU.balance[0], MENU.topup[0]], [MENU.stats[0], MENU.stop[0]], ...(admin ? [[MENU.admin[0]]] : [])].map((r) => r.map((text) => ({ text }))),
   is_persistent: true, resize_keyboard: true,
 });
 // Інлайн-меню адміна (callback_data «adm:…» без «|» — щоб не плутатись із третьою частиною «гравець» у режимі тесту)
@@ -303,6 +304,11 @@ export function onMessage(C, m, as) {
     if (!pid) return say(unknown);
     return { ...out, poll: { t: "ask", chat: chatId, ...asEv } };
   }
+  // статистика: інлайн-список гравців, вибір — у poll.step (cb «st:…», src/stats.js)
+  if (c === "/stats" || /^статистика/i.test(text)) {
+    if (!pid) return say(unknown);
+    return say(stats.LIST_TEXT, stats.listKb(C, pid));
+  }
   if (c === "/balance" || /^баланс/i.test(text)) {
     if (!pid) return say(unknown);
     { const r = balanceReply(C, pid); return say(r.text, r.kb); }
@@ -311,7 +317,7 @@ export function onMessage(C, m, as) {
     if (!pid) return say(unknown);
     { const r = topupReply(C, pid); return say(r.text, r.kb); }
   }
-  return say("Я вмію: /who — хто йде, /in — хочу грати, /out — не зможу прийти, /balance — мій баланс, /topup — поповнити баланс, /weather — погода на пʼятницю, /stop — не писати мені 🙂");
+  return say("Я вмію: /who — хто йде, /in — хочу грати, /out — не зможу прийти, /balance — мій баланс, /topup — поповнити баланс, /stats — статистика, /weather — погода на пʼятницю, /stop — не писати мені 🙂");
 }
 
 // /balance: баланс і остання списана гра; кнопка «💳 Поповнити» — завжди (хоч у плюсі), якщо є банка
