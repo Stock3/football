@@ -340,7 +340,8 @@ const HANDLERS = {
     else if (a === "c") changed(X, g, X.pid, m);
     else if (a === "r") comeBack(X, g, X.pid, m);
     const iv = X.P.inv[X.pid];
-    if (iv && ev.msg != null && ["y", "n", "c", "r"].includes(a)) iv.msg = ev.msg;
+    // id повідомлення з кнопками: після y/n/c/r — завжди оновлюємо, після інших дій — лише якщо його ще немає
+    if (iv && ev.msg != null && (["y", "n", "c", "r"].includes(a) || iv.msg == null)) iv.msg = ev.msg;
   },
   in(X, ev) {
     const g = game(X), pid = X.pid;

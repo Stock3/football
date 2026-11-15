@@ -116,36 +116,43 @@ function routeEdit(C, e) {
 // Конфлікт запису (409/422) — перечитати й порахувати заново (до 3 спроб). Повідомлення — лише після запису.
 // Запрошення, що не дійшли (бот заблокований), — окремим кроком {t:"nobot"}: гравець тримає місце, організатору — 📵.
 async function pollRun(env, ev) {
-  let st, C, r;
+  let st, C, r, stage;
   for (let attempt = 1; ; attempt++) {
     st = await load(env); C = ctx(env, st); r = poll.step(C, ev);
     try {
-      if (r.data) await ghWrite(env, "data.json", r.data, st.dsha, "Бот: " + r.dnote);
-      if (r.tg) await ghWrite(env, "tg.json", r.tg, st.sha, "Бот: " + r.note);
+      if (r.data) { stage = "data"; await ghWrite(env, "data.json", r.data, st.dsha, "Бот: " + r.dnote); }
+      if (r.tg) { stage = "tg"; await ghWrite(env, "tg.json", r.tg, st.sha, "Бот: " + r.note); }
       break;
     } catch (e) {
-      if (e.conflict && attempt < 3) { console.log(`опитування: конфлікт (${e.status}), спроба ${attempt + 1}`); continue; }
-      throw e;
+      if (e.conflict && attempt < 4) { console.log(`опитування: конфлікт (${e.status}), спроба ${attempt + 1}`); continue; }
+      // Критичне — лише запис складу (data.json). Якщо він уже на місці, а не вдався tg.json, відповідь гравця збережено:
+      // решту кроків (відповідь, редагування, звіт) виконуємо, стан опитування вирівняє наступна подія (reconcile).
+      if (stage === "data" || !r.tg) throw e;
+      console.log("опитування: tg.json не записано:", e.message);
+      break;
     }
   }
+  // Усе нижче — не критичне: збій одного кроку логуємо й не зупиняємо решту.
+  const safe = async (name, fn) => { try { return await fn(); } catch (e) { console.log(name + ":", e.message); } };
   if (r.answer) {
-    await tgCall(env, "answerCallbackQuery", { callback_query_id: r.answer.id, ...(r.answer.text ? { text: r.answer.text } : {}) })
-      .catch((e) => console.log("Telegram answerCallbackQuery:", e.message));
+    await safe("Telegram answerCallbackQuery", () => tgCall(env, "answerCallbackQuery", { callback_query_id: r.answer.id, ...(r.answer.text ? { text: r.answer.text } : {}) }));
   }
   for (const e0 of r.edits) {
-    const e = routeEdit(C, e0);
-    if (!e) continue;
-    await tgCall(env, "editMessageText", { chat_id: e.chat, message_id: e.msg, text: e.text, ...(e.kb ? { reply_markup: e.kb } : {}) })
-      .catch((err) => { if (!/not modified/i.test(err.message)) console.log("Telegram editMessageText:", err.message); });
+    await safe("Telegram editMessageText", async () => {
+      const e = routeEdit(C, e0);
+      if (!e) return;
+      try { await tgCall(env, "editMessageText", { chat_id: e.chat, message_id: e.msg, text: e.text, ...(e.kb ? { reply_markup: e.kb } : {}) }); }
+      catch (err) { if (!/not modified/i.test(err.message)) throw err; }
+    });
   }
   const sent = [], failed = [], nobot = [];
   for (const m of r.msgs) {
-    const ok = await deliver(env, C, m);
+    const ok = (await safe("deliver", () => deliver(env, C, m))) === true;
     if (m.pid && !m.admin) (ok ? sent : failed).push(m.name);
     if (!ok && m.inv) nobot.push(m.inv);
   }
-  if (r.weather) await sendWeather(env, C, r.weather.chat, r.weather.date, r.weather.as);
-  if (nobot.length) await pollRun(env, { t: "nobot", pids: nobot });
+  if (r.weather) await safe("погода", () => sendWeather(env, C, r.weather.chat, r.weather.date, r.weather.as));
+  if (nobot.length) await safe("nobot", () => pollRun(env, { t: "nobot", pids: nobot }));
   return { sent, failed };
 }
 
