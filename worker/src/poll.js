@@ -363,8 +363,9 @@ function out(X, g, pid, reason, src, m) {
   const why = reason ? ": " + reason : src === "site" ? " (прибрано на сайті)" : src === "admin" ? " (відмітив організатор)" : "";
   X.head.push(`🚫 ${name} скасував${why}` + arrow(invd));
   if (src === "cmd" || src === "changed") toP(X, pid, say(X, "outOk"));
-  const t = src === "cmd" || m ? target(X, pid, m) : null; // прибрано на сайті чи організатором — повідомлення гравця не чіпаємо
+  const t = src === "cmd" || src === "admin" || m ? target(X, pid, m) : null; // прибрано на сайті — повідомлення гравця не чіпаємо
   if (t) edit(X, t, say(X, "skipped"), backKb(g.id));
+  if (src === "admin") toP(X, pid, say(X, "adminNo", gameVars(X.C, g, pid)), backKb(g.id));
   X.notes.push(name + " скасував"); X.dnotes.push(name + " не зможе");
   return true;
 }
@@ -374,6 +375,9 @@ function markNo(X, g, pid) {
   const inv = X.P.inv[pid];
   if (inGame(g, pid) || (inv && inv.ans === "yes")) { out(X, g, pid, "", "admin"); return; }
   inv.ans = "no"; delete inv.laterUntil; delete inv.nobot;
+  const t = target(X, pid, null); // відкрите запрошення гравця закриваємо й пишемо йому окремо (без бота — нічого)
+  if (t) edit(X, t, say(X, "skipped"), backKb(g.id));
+  toP(X, pid, say(X, "adminNo", gameVars(X.C, g, pid)), backKb(g.id));
   unqueue(X.P, pid); // організатор каже «не зможе» — з черги теж прибираємо
   const invd = fillSlots(X, g);
   X.head.push(`❌ ${nameOf(X.C, pid)} — не зможе (відмітив організатор)` + arrow(invd));

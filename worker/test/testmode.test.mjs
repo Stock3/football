@@ -446,3 +446,18 @@ test("testMode: меню адміна «Не зможе» — запрошени
   await say("/as Вова /who");
   assert.ok(lastTo(w, from2).some((m) => m.startsWith("👤 для Вова:")));
 });
+
+test("testMode: «Не зможе» від організатора — повідомлення гравцю йде в чат адміна з «👤 для Імʼя:» і кнопкою повернення з id гравця", async (t) => {
+  clock(t, THU);
+  const w = mockWorld();
+  await say("/poll");
+  const from = mark(w);
+  await press("adm:no:p2", ADMIN, 55);
+  const m = w.sent.slice(from).find((x) => x.text.startsWith("👤 для Борис:") && /Організатор відмітив/.test(x.text));
+  assert.ok(m, lastTo(w, from).join("\n"));
+  assert.equal(m.chat_id, ADMIN);
+  const r = m.reply_markup.inline_keyboard.flat().find((b) => b.text.includes("Повернутися"));
+  assert.ok(r.callback_data.startsWith("r|" + GID) && r.callback_data.endsWith("|p2"), r.callback_data);
+  await press(r.callback_data);
+  assert.ok(game(w).c.includes("p2") || JSON.parse(w.files["tg.json"]).poll.inv.p2.req);
+});

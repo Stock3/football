@@ -537,3 +537,67 @@ test("кнопка «💳 Поповнити» внизу: web_app з https-ба
   assert.equal(core.onMessage(C0(), pm("/stop", 102)).ops[0].op, "unlink", "/stop працює");
   assert.equal(core.onMessage(C0(), pm("💳 Поповнити", 102)).msgs.length, 1, "старий текст кнопки → /topup");
 });
+
+// ---------- «Не зможе» від організатора → повідомлення гравцю ----------
+const RET = () => "r|" + GID;
+const hasRet = (m) => m.reply_markup && m.reply_markup.inline_keyboard.flat().some((b) => b.callback_data === RET());
+
+test("«Не зможе» від організатора: гравець у грі отримує повідомлення з «↩️ Повернутися в гру», кнопка працює", async (t) => {
+  clock(t, THU);
+  const w = mockWorld();
+  await say("/poll");
+  await press("y|" + GID, chat("p2"), 41); // Борис у грі
+  const from = w.sent.length, ed = edits(w).length;
+  await press("adm:no:p2", ADMIN, 33);
+  const msgs = to(w, chat("p2"), from);
+  assert.equal(msgs.length, 1);
+  assert.match(msgs[0].text, /Організатор відмітив, що ти не зможеш на гру 13 листопада ❌/);
+  assert.ok(hasRet(msgs[0]));
+  // його повідомлення з кнопками (inv.msg = 41) закрито
+  const e = edits(w).slice(ed).find((x) => x.chat_id === chat("p2"));
+  assert.equal(e.message_id, 41);
+  assert.equal(e.text, "Ти пропускаєш цю гру ❌");
+  assert.ok(hasRet(e));
+  // «Повернутися»: вільне місце → «Буду»
+  await press(RET(), chat("p2"), 41);
+  assert.ok(dataState(w).games[0].c.includes("p2") || tgState(w).poll.inv.p2.req, "повернувся: місце або черга");
+});
+
+test("«Не зможе» від організатора: запрошений зі «пізніше» — запрошення відредаговано + одне нове повідомлення; без відповіді — лише повідомлення", async (t) => {
+  clock(t, THU);
+  const w = mockWorld();
+  await say("/poll");
+  const inv = () => tgState(w).poll.inv;
+  const ids = Object.keys(inv()).filter((id) => inv()[id].ans == null && !inv()[id].nobot);
+  const [lat, plain] = ids;
+  await press("l|" + GID, chat(lat), 52);
+  assert.equal(inv()[lat].ans, "later");
+  let from = w.sent.length, ed = edits(w).length;
+  await press("adm:no:" + lat, ADMIN, 33);
+  assert.equal(inv()[lat].ans, "no");
+  const m1 = to(w, chat(lat), from).filter((m) => /Організатор відмітив/.test(m.text));
+  assert.equal(m1.length, 1);
+  assert.ok(hasRet(m1[0]));
+  assert.ok(edits(w).slice(ed).some((x) => x.chat_id === chat(lat) && x.message_id === 52 && x.text === "Ти пропускаєш цю гру ❌" && hasRet(x)));
+  // без відповіді (id повідомлення невідомий): лише нове повідомлення
+  from = w.sent.length; ed = edits(w).length;
+  await press("adm:no:" + plain, ADMIN, 33);
+  assert.equal(to(w, chat(plain), from).filter((m) => /Організатор відмітив/.test(m.text)).length, 1);
+  assert.ok(!edits(w).slice(ed).some((x) => x.chat_id === chat(plain)));
+  // кнопка «Повернутися» після цього працює (вільне місце → «Буду»)
+  await press(RET(), chat(plain), 60);
+  assert.ok(dataState(w).games[0].c.includes(plain) || tgState(w).poll.inv[plain].req, "повернувся: місце або черга");
+});
+
+test("«Не зможе» від організатора: гравцю без бота нічого не шлемо", async (t) => {
+  clock(t, THU);
+  const w = mockWorld();
+  await say("/poll");
+  const nobotId = Object.keys(tgState(w).poll.inv).find((id) => tgState(w).poll.inv[id].nobot);
+  assert.ok(nobotId);
+  const from = w.sent.length, ed = edits(w).length;
+  await press("adm:no:" + nobotId, ADMIN, 33);
+  assert.equal(tgState(w).poll.inv[nobotId].ans, "no");
+  assert.ok(!w.sent.slice(from).some((m) => /Організатор відмітив/.test(m.text)));
+  assert.equal(edits(w).slice(ed).filter((x) => x.chat_id !== ADMIN).length, 0);
+});
