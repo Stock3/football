@@ -214,7 +214,7 @@
   "game": "g20261120",
   "open": true,
   "startedAt": "2026-11-19T09:00:20.257Z",
-  "announced": null,
+  "announced": "2026-11-19T15:58:29.132Z",
   "short": false,
   "queueFront": [],
   "inv": {
@@ -230,7 +230,7 @@
    },
    "p3": {
     "at": "2026-11-19T09:00:20.257Z",
-    "ans": null,
+    "ans": "yes",
     "remindedAt": "2026-11-19T12:00:20.744Z"
    },
    "p8": {
