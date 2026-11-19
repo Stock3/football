@@ -41,6 +41,7 @@ function say(W, text, pid, now) { const m = msg(W, text, pid, now); return m.pol
 let cbn = 0;
 const press = (W, pid, a, now) => go(W, { t: "cb", id: "q" + ++cbn, chat: chat(pid), msg: 77, data: a + "|" + GID }, now);
 const tick = (W, now) => go(W, { t: "tick" }, now);
+const markNo = (W, pid, now) => go(W, { t: "cb", id: "q" + ++cbn, chat: chat("p1"), msg: 77, data: "adm:no:" + pid }, now);
 const P = (W) => W.tg.poll;
 const G = (W) => W.data.games.find((g) => g.id === P(W).game);
 const adm = (r) => (r.msgs.find((m) => m.admin) || {}).text || "";
@@ -118,14 +119,7 @@ test("день гри: «Передумав» після «Не зможу» п�
   assert.match(adm(r), /Леся повернувся/);
 });
 
-test("/no Імʼя і «Не зможу» прибирають гравця з черги очікування", () => {
-  const W = world(); say(W, "/poll", "p1"); allYes(W);
-  say(W, "/in", "p10", fri("10:00"));
-  assert.deepEqual(P(W).queueFront, ["p10"]);
-  const r = say(W, "/no Їжак", "p1", fri("10:01"));
-  assert.match(adm(r), /Їжак — не зможе \(відмітив організатор\)/);
-  assert.deepEqual(P(W).queueFront, []);
-  assert.equal(P(W).inv.p10.req, undefined);
+test("«Не зможу» прибирає гравця з черги очікування",() => {
   // не в день гри: «Не зможу» (стара кнопка) — більше не чекає місця
   const W2 = world(); say(W2, "/poll", "p1"); allYes(W2);
   say(W2, "/in", "p10");
@@ -206,7 +200,7 @@ test("день гри: з 09:00 кожні 30 хв мовчазним (без б
   assert.deepEqual(reminded(tick(W, fri("09:29"))), silent);
   // Борис відповів, Вову відмітив організатор, Гліба додали на сайті
   press(W, "p2", "y", fri("09:40"));
-  say(W, "/no Вова", "p1", fri("09:41"));
+  markNo(W, "p3", fri("09:41"));
   G(W).y = ["p4"]; go(W, { t: "sync" }, fri("09:42"));
   r = tick(W, fri("10:00"));
   const left = reminded(r);

@@ -41,6 +41,7 @@ const msg = (W, text, pid, now) => core.onMessage(ctxOf(W, now), { text, chat: {
 function say(W, text, pid, now) { const m = msg(W, text, pid, now); return m.poll ? go(W, m.poll, now) : m; }
 let cbn = 0;
 const press = (W, pid, a, now) => go(W, { t: "cb", id: "q" + ++cbn, chat: chat(pid), msg: 77, data: a + "|" + GID }, now);
+const markNo = (W, pid, now) => go(W, { t: "cb", id: "q" + ++cbn, chat: chat("p1"), msg: 77, data: "adm:no:" + pid }, now);
 const P = (W) => W.tg.poll;
 const G = (W) => W.data.games.find((g) => g.id === P(W).game);
 const adm = (r) => (r.msgs.find((m) => m.admin) || {}).text || "";
@@ -224,9 +225,9 @@ test("/who: групи з кількістю й іменами", () => {
   assert.match(t, /📵 Без бота \(1\): Дана/);
   assert.match(msg(W, "/who", "p13").poll ? "ok" : "", /ok/);
 });
-test("/no Імʼя (організатор): відмічає «не зможе» за гравця без бота й запрошує наступного", () => {
+test("«Не зможе» в меню адміна: відмічає «не зможе» за гравця без бота й запрошує наступного", () => {
   const W = world(); say(W, "/poll", "p1");
-  const r = say(W, "/no дана", "p1");
+  const r = markNo(W, "p5");
   assert.equal(P(W).inv.p5.ans, "no");
   assert.match(adm(r), /❌ Дана — не зможе \(відмітив організатор\) → запрошено: /);
 });

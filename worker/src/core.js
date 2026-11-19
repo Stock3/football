@@ -296,9 +296,9 @@ export function onMessage(C, m, as) {
   }
   if (c === "/cancel") return bc ? { ...out, poll: { t: "bccancel", chat: chatId, ...asEv } } : say("Нічого скасовувати 🙂");
   // команди організатора (немає в меню); організатор — гравець settings.org з підключеним ботом
-  if (c === "/poll" || c === "/endpoll" || c === "/no") {
+  if (c === "/poll" || c === "/endpoll") {
     if (!pid || pid !== C.S.org) return say(C.S.say.adminOnly);
-    return { ...out, poll: { t: c === "/poll" ? "start" : c === "/endpoll" ? "end" : "no", chat: chatId, arg: rest.join(" "), ...asEv } };
+    return { ...out, poll: { t: c === "/poll" ? "start" : "end", chat: chatId, arg: rest.join(" "), ...asEv } };
   }
   if (c === "/who" || /^хто йде/i.test(text)) {
     if (!pid) return say(unknown);

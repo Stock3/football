@@ -36,20 +36,30 @@ export function cb(X, ev, H) {
     if (b === "poll") return H.start(X);
     if (b === "end") return H.end(X);
     if (b === "bc") return edit("📣 Розсилка. Кому?", kbOf([[[AUD.all, "bc:all"], [AUD.game, "bc:game"]], [["Скасувати", "bc:x"]]]));
-    if (b === "no") { // «Не зможе»: гравці поточної гри; натиснути імʼя = /no Імʼя
+    if (b === "no") { // «Не зможе»: у грі (✅) і запрошені, що тримають місце (⏳ не відповів, 🕐 пізніше, 📵 без бота)
       const g = H.game(X);
       if (!X.P || !X.P.open || !g) return ans("Опитування зараз не йде");
-      let head = "Хто не зможе? Обери гравця:";
+      const list = () => {
+        const inG = gameIds(g), rest = [];
+        for (const pid of Object.keys(X.P.inv || {})) {
+          const iv = X.P.inv[pid];
+          if (inG.includes(pid) || !iv || iv.req) continue;
+          if (iv.ans === "later") rest.push([pid, "🕐"]);
+          else if (iv.ans == null) rest.push([pid, iv.nobot ? "📵" : "⏳"]);
+        }
+        return [...inG.map((pid) => [pid, "✅"]), ...rest];
+      };
+      let head = "Хто не зможе? Обери гравця:\n✅ у грі · ⏳ не відповів · 🕐 пізніше · 📵 без бота";
       if (c) {
-        if (!gameIds(g).includes(c)) return ans("Уже не в грі");
+        if (!list().some((x) => x[0] === c)) return ans("Уже неактуально");
         H.markNo(X, g, c);
-        head = `✅ ${nameOf(C, c)} — відмічено. Ще когось?`;
+        head = `✅ ${nameOf(C, c)} — відмічено. Ще когось?\n✅ у грі · ⏳ не відповів · 🕐 пізніше · 📵 без бота`;
       }
-      const ids = gameIds(g);
+      const items = list();
       const rows = [];
-      for (let i = 0; i < ids.length; i += 2) rows.push(ids.slice(i, i + 2).map((id) => [nameOf(C, id), "adm:no:" + id]));
+      for (let i = 0; i < items.length; i += 2) rows.push(items.slice(i, i + 2).map(([id, ic]) => [ic + " " + nameOf(C, id), "adm:no:" + id]));
       rows.push([["← Назад", "adm:menu"]]);
-      return edit(ids.length ? head : "У грі нікого немає", kbOf(rows));
+      return edit(items.length ? head : "Нікого відмічати", kbOf(rows));
     }
     return;
   }

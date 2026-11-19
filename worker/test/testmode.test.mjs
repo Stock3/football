@@ -429,3 +429,20 @@ test("testMode, день гри: нагадування кожні 30 хв з 09
   assert.equal(tgState(w).poll.inv.p3.laterUntil, FRI("09:45").toISOString());
   assert.deepEqual(w.sent.filter((m) => m.chat_id !== ADMIN), []);
 });
+
+test("testMode: меню адміна «Не зможе» — запрошений без відповіді (⏳), вибір запрошує наступного; /as інші команди працюють", async (t) => {
+  clock(t, THU);
+  const w = mockWorld();
+  await say("/poll");
+  await press("adm:no", ADMIN, 55);
+  const e = w.tgCalls.filter((c) => c.method === "editMessageText").map((c) => c.body).at(-1);
+  const l = e.reply_markup.inline_keyboard.flat().map((b) => b.text);
+  assert.ok(l.includes("⏳ Борис") && l.includes("⏳ Дана"), l.join());
+  const from = mark(w);
+  await press("adm:no:p2", ADMIN, 55);
+  assert.equal(JSON.parse(w.files["tg.json"]).poll.inv.p2.ans, "no");
+  assert.ok(lastTo(w, from).some((m) => /Борис — не зможе \(відмітив організатор\)/.test(m)));
+  const from2 = mark(w);
+  await say("/as Вова /who");
+  assert.ok(lastTo(w, from2).some((m) => m.startsWith("👤 для Вова:")));
+});

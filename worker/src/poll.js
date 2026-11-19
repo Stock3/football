@@ -20,7 +20,7 @@
 //   inv.msg — id повідомлення з кнопками, на яке востаннє натиснув гравець (щоб /out і /in могли його відредагувати).
 //
 // Події ev.t: start (/poll або автозапуск), end (/endpoll), cb (кнопка), ask (/out), out (причина або /skip), in (/in — хочу грати),
-//   who (/who), no (/no Імʼя — організатор відмічає «не зможе»), sync (сайт зберіг дані), tick (cron), nobot (не дійшло запрошення),
+//   who (/who), sync (сайт зберіг дані), tick (cron), nobot (не дійшло запрошення),
 //   testreset (/testreset — лише в режимі тесту: скинути опитування й прапорці надсилання тестової гри),
 //   bctext / bccancel (текст розсилки й /cancel), а кнопки «adm:…»/«bc:…» (меню адміна, розсилка) — у cb → admin.js; розсилка — tg.bc.
 // Режим тесту (settings.testMode): ev.as — id гравця, від імені якого діє адмін (/as; кнопка в перенаправленому повідомленні несе id
@@ -350,7 +350,7 @@ function changed(X, g, pid, m) {
   if (count(g) < need(X.C) && (holds(X.P, g, pid) || free(X, g) > 0)) return yes(X, g, pid, m);
   full(X, g, pid, m);
 }
-// Вихід зі складу: /out, «Передумав» після «Буду», прибрано на сайті, /no від організатора.
+// Вихід зі складу: /out, «Передумав» після «Буду», прибрано на сайті, відмітка організатора (меню адміна).
 function out(X, g, pid, reason, src, m) {
   const P = X.P, inv = P.inv[pid], name = nameOf(X.C, pid);
   if (!inGame(g, pid) && !(inv && inv.ans === "yes")) { if (src === "cmd") toP(X, pid, say(X, "notIn")); return false; }
@@ -369,7 +369,7 @@ function out(X, g, pid, reason, src, m) {
   return true;
 }
 
-// Організатор відмічає, що гравець не зможе (/no Імʼя, меню адміна → «Не зможе»)
+// Організатор відмічає, що гравець не зможе (меню адміна → «Не зможе»)
 function markNo(X, g, pid) {
   const inv = X.P.inv[pid];
   if (inGame(g, pid) || (inv && inv.ans === "yes")) { out(X, g, pid, "", "admin"); return; }
@@ -443,16 +443,6 @@ const HANDLERS = {
     const g = current(X);
     reply(X, ev.chat, g ? whoText(X.C, g, X.P) : say(X, "noPoll"));
   },
-  no(X, ev) {
-    const g = game(X), q = String(ev.arg || "").trim().toLowerCase();
-    if (!X.P || !X.P.open || !g) { X.head.push("ℹ️ Опитування зараз не йде"); return; }
-    if (!q) { X.head.push("Напиши так: /no Імʼя — відмітити, що гравець не зможе"); return; }
-    const ids = [...new Set([...gameIds(g), ...Object.keys(X.P.inv)])];
-    const by = (f) => ids.filter((id) => f(String(nameOf(X.C, id)).toLowerCase()));
-    let c = by((n) => n === q); if (!c.length) c = by((n) => n.startsWith(q));
-    if (c.length !== 1) { X.head.push(c.length ? `Кілька збігів: ${c.map((id) => nameOf(X.C, id)).join(", ")} — уточни імʼя` : `Не знайшов «${ev.arg}» серед запрошених і в складі`); return; }
-    markNo(X, g, c[0]);
-  },
   bctext: (X, ev) => admin.text(X, ev, HOOK),
   bccancel: (X, ev) => (X.pid && X.pid === X.C.S.org ? admin.cancel(X, ev) : reply(X, ev.chat, say(X, "adminOnly"))),
   testreset(X) {
@@ -471,7 +461,7 @@ const HANDLERS = {
   },
   // Усе тут — за розкладом. Не в день гри: чекає кінця тихих годин, мовчазним — одне нагадування через 3 год.
   // У день гри: тихі години не діють; з poll.dayFrom мовчазним (ans null) — нагадування кожні poll.dayEvery хв,
-  // поки не відповіли, організатор не відмітив (/no, сайт) або склад не зібрано; «пізніше» теж чекає dayFrom.
+  // поки не відповіли, організатор не відмітив (меню адміна, сайт) або склад не зібрано; «пізніше» теж чекає dayFrom.
   tick(X) {
     const q = quiet(X);
     if (!q && S(X).poll.auto) autoStart(X);

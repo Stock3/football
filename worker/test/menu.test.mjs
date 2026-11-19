@@ -211,30 +211,57 @@ test("«⚙️ Адмін» → інлайн-меню; «Почати/Закри
   assert.ok(w.sent.some((m) => /Опитування закрито/.test(m.text)));
 });
 
-test("меню адміна → «Не зможе»: список гравців гри, вибір = /no Імʼя", async (t) => {
+test("меню адміна → «Не зможе»: у грі ✅, не відповів ⏳, пізніше 🕐, без бота 📵; вибір = відмітка «не зможе»", async (t) => {
   clock(t, THU);
   const w = mockWorld();
   await press("adm:no");
   assert.equal(answers(w).at(-1).text, "Опитування зараз не йде");
   await say("/poll");
   for (const p of ["p2", "p3"]) await press("y|" + GID, chat(p));
+  const inv = () => tgState(w).poll.inv;
+  const nm = (id) => NAMES[+id.slice(1) - 1];
+  const waiting = Object.keys(inv()).filter((id) => inv()[id].ans == null && !inv()[id].nobot);
+  assert.ok(waiting.length >= 3);
+  const [lat, ...rest] = waiting; // один — «пізніше»
+  await press("l|" + GID, chat(lat));
+  assert.equal(inv()[lat].ans, "later");
+  const nobotId = Object.keys(inv()).find((id) => inv()[id].nobot);
+  assert.ok(nobotId, "є гравець без бота");
   await press("adm:no", ADMIN, 33);
   const e = edits(w).at(-1);
   assert.equal(e.message_id, 33);
   assert.match(e.text, /Хто не зможе/);
-  assert.deepEqual(labels(e.reply_markup), ["Борис", "Вова", "← Назад"]);
-  const pick = e.reply_markup.inline_keyboard.flat().find((b) => b.text === "Борис").callback_data;
-  assert.equal(pick, "adm:no:p2");
+  assert.match(e.text, /✅ у грі · ⏳ не відповів · 🕐 пізніше · 📵 без бота/);
+  const l = labels(e.reply_markup);
+  assert.deepEqual(l.slice(0, 2), ["✅ Борис", "✅ Вова"]);
+  assert.equal(l.at(-1), "← Назад");
+  assert.ok(l.includes("🕐 " + nm(lat)) && l.includes("📵 " + nm(nobotId)));
+  for (const id of rest) assert.ok(l.includes("⏳ " + nm(id)));
+  assert.ok(l.indexOf("🕐 " + nm(lat)) > 1 && l.slice(0, 2).every((x) => x.startsWith("✅")), "✅ першими");
+  // не запрошені (немає в inv) у списку не з’являються
+  const notInv = NAMES.slice(0, 12).filter((n, i) => !inv()["p" + (i + 1)] && !["p2", "p3"].includes("p" + (i + 1)));
+  for (const n of notInv) assert.ok(!l.some((x) => x.endsWith(" " + n)), n);
+  // 2 колонки
+  assert.ok(e.reply_markup.inline_keyboard.slice(0, -1).every((r) => r.length <= 2));
+  // вибір гравця, що не відповів: ans "no", наступний із черги запрошений
+  const pick = "adm:no:" + rest[0];
+  const invitedBefore = Object.keys(inv());
   const from = w.sent.length;
   await press(pick, ADMIN, 33);
-  assert.deepEqual(dataState(w).games[0].c, ["p3"]);
-  assert.equal(tgState(w).poll.inv.p2.ans, "no");
-  assert.ok(to(w, ADMIN, from).some((m) => m.text.includes("Борис скасував (відмітив організатор)")));
-  assert.deepEqual(labels(edits(w).at(-1).reply_markup), ["Вова", "← Назад"]);
-  assert.match(edits(w).at(-1).text, /Борис — відмічено/);
-  // Борис уже не в грі
+  assert.equal(inv()[rest[0]].ans, "no");
+  assert.ok(Object.keys(inv()).length >= invitedBefore.length);
+  assert.ok(to(w, ADMIN, from).some((m) => m.text.includes(nm(rest[0]) + " — не зможе (відмітив організатор)")));
+  assert.ok(!labels(edits(w).at(-1).reply_markup).some((x) => x.endsWith(" " + nm(rest[0]))), "відповівший «ні» зникає зі списку");
+  // повторно — вже неактуально
   await press(pick, ADMIN, 33);
-  assert.equal(answers(w).at(-1).text, "Уже не в грі");
+  assert.equal(answers(w).at(-1).text, "Уже неактуально");
+  // у грі: як раніше
+  const from2 = w.sent.length;
+  await press("adm:no:p2", ADMIN, 33);
+  assert.deepEqual(dataState(w).games[0].c, ["p3"]);
+  assert.equal(inv().p2.ans, "no");
+  assert.ok(to(w, ADMIN, from2).some((m) => m.text.includes("Борис скасував (відмітив організатор)")));
+  assert.match(edits(w).at(-1).text, /Борис — відмічено/);
   await press("adm:menu", ADMIN, 33);
   assert.equal(edits(w).at(-1).text, "⚙️ Адмін");
 });

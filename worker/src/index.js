@@ -234,7 +234,7 @@ async function setup(url, env) {
     try { await tgCall(env, method, body); lines.push(`${name}: OK`); } catch (e) { lines.push(`${name}: ПОМИЛКА — ${e.message}`); }
   };
   await step("setWebhook " + url.origin + "/tg", "setWebhook", { url: url.origin + "/tg", secret_token: env.TG_SECRET, allowed_updates: ["message", "callback_query"], drop_pending_updates: false });
-  // /poll, /endpoll, /no — команди організатора, у меню їх немає
+  // /poll, /endpoll — команди організатора, у меню їх немає
   await step("setMyCommands", "setMyCommands", { commands: [
     { command: "who", description: "Хто йде" },
     { command: "in", description: "Хочу грати" },
