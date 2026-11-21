@@ -884,7 +884,14 @@
    "active": true,
    "phone": "+380 68 050 34 35",
    "tg": "tom_chikk",
-   "prio": 3
+   "prio": 3,
+   "top": [
+    {
+     "id": "tmwqakm3uj8v",
+     "d": "2026-11-21",
+     "a": 81
+    }
+   ]
   },
   {
    "id": "p8",
