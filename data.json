@@ -1,301 +1,5 @@
 {
  "v": 1,
- "players": [
-  {
-   "id": "p1",
-   "name": "Льоша",
-   "active": true,
-   "num": 8,
-   "pos": [
-    "dm",
-    "cb"
-   ],
-   "foot": "r",
-   "h": 180,
-   "bd": "1998-03-17",
-   "quote": "Головне не пропустити, а голи прийдуть",
-   "phone": "+380 95 189 34 73",
-   "tg": "Mit_O_17",
-   "prio": 1,
-   "top": [
-    {
-     "id": "tmwhg4nnf2uo",
-     "d": "2026-11-13",
-     "a": 81
-    }
-   ]
-  },
-  {
-   "id": "p2",
-   "name": "Тоха",
-   "active": true,
-   "phone": "+380 99 604 97 83",
-   "tg": "Kuzya1999",
-   "prio": 2,
-   "top": [
-    {
-     "id": "tmwhk8ck4co2",
-     "d": "2026-11-13",
-     "a": 81
-    }
-   ]
-  },
-  {
-   "id": "p3",
-   "name": "Коля",
-   "active": true,
-   "phone": "+380 68 050 34 35",
-   "tg": "tom_chikk",
-   "prio": 3,
-   "top": [
-    {
-     "id": "tmwqakm3uj8v",
-     "d": "2026-11-21",
-     "a": 81
-    }
-   ]
-  },
-  {
-   "id": "p8",
-   "name": "Назар",
-   "active": true,
-   "phone": "+380 50 140 65 31",
-   "tg": "nazar_pochaiv",
-   "prio": 4,
-   "top": [
-    {
-     "id": "tmwhk85u5ois",
-     "d": "2026-11-13",
-     "a": 81
-    },
-    {
-     "id": "tmwq4kwtc6zj",
-     "d": "2026-11-21",
-     "a": 81
-    }
-   ]
-  },
-  {
-   "id": "p4",
-   "name": "Веталь",
-   "active": true,
-   "phone": "+380 96 182 79 94",
-   "tg": "maks_v10",
-   "prio": 5
-  },
-  {
-   "id": "p5",
-   "name": "Демчук",
-   "active": true,
-   "phone": "+380 99 238 57 32",
-   "prio": 6
-  },
-  {
-   "id": "p6",
-   "name": "Макс",
-   "active": true,
-   "phone": "+380 99 511 38 88",
-   "tg": "mstrilec",
-   "prio": 7,
-   "top": [
-    {
-     "id": "tmwhk7qf9hp0",
-     "d": "2026-11-13",
-     "a": 81
-    },
-    {
-     "id": "tmwq4l0jwwct",
-     "d": "2026-11-21",
-     "a": 81
-    }
-   ]
-  },
-  {
-   "id": "p7",
-   "name": "Ден",
-   "active": true,
-   "phone": "+380 99 066 77 13",
-   "tg": "Dionisqa",
-   "prio": 8,
-   "top": [
-    {
-     "id": "tmwhk6rp0abi",
-     "d": "2026-11-13",
-     "a": 81
-    },
-    {
-     "id": "tmwq4t92kd9m",
-     "d": "2026-11-21",
-     "a": 81
-    }
-   ]
-  },
-  {
-   "id": "p9",
-   "name": "Ігор",
-   "active": true,
-   "phone": "+380 98 282 80 88",
-   "tg": "Igor_Stasyuk",
-   "prio": 9,
-   "top": [
-    {
-     "id": "tmwhk7j1pzg7",
-     "d": "2026-11-13",
-     "a": 81
-    },
-    {
-     "id": "tmwpc7k1f5oz",
-     "d": "2026-11-20",
-     "a": 81
-    }
-   ]
-  },
-  {
-   "id": "p19",
-   "name": "Стас",
-   "active": true,
-   "phone": "+380 50 911 15 34",
-   "prio": 10,
-   "top": [
-    {
-     "id": "tmwhk7yqt6nz",
-     "d": "2026-11-13",
-     "a": 81
-    },
-    {
-     "id": "tmwq4k8haubq",
-     "d": "2026-11-21",
-     "a": 81
-    }
-   ]
-  },
-  {
-   "id": "p14",
-   "name": "Влад",
-   "active": true,
-   "phone": "+380 95 420 65 60",
-   "tg": "vlad_shtefyuk",
-   "prio": 11,
-   "top": [
-    {
-     "id": "tmwq4l53mktt",
-     "d": "2026-11-21",
-     "a": 81
-    }
-   ]
-  },
-  {
-   "id": "p15",
-   "name": "Льошка",
-   "active": true,
-   "phone": "+380 97 669 12 04",
-   "tg": "X5_REVCHIK",
-   "prio": 12,
-   "top": [
-    {
-     "id": "tmwhk7betjh5",
-     "d": "2026-11-13",
-     "a": 200
-    }
-   ]
-  },
-  {
-   "id": "p12",
-   "name": "Дімон",
-   "active": true,
-   "phone": "+380 99 265 45 43",
-   "tg": "ttkachhhh",
-   "prio": 13,
-   "top": [
-    {
-     "id": "tmwhk73392k1",
-     "d": "2026-11-13",
-     "a": 240
-    }
-   ]
-  },
-  {
-   "id": "p13",
-   "name": "Саня Д",
-   "active": true,
-   "phone": "+380 98 918 44 24",
-   "tg": "doroshit_23",
-   "prio": 14
-  },
-  {
-   "id": "p17",
-   "name": "Олег",
-   "active": true,
-   "tg": "Deymaxpdr",
-   "prio": 15
-  },
-  {
-   "id": "p18",
-   "name": "Макс Д",
-   "active": true,
-   "tg": "DeyMaxX",
-   "prio": 16
-  },
-  {
-   "id": "p20",
-   "name": "Ярік Б",
-   "active": true,
-   "phone": "+380 68 099 89 68",
-   "tg": "slav_chik_08",
-   "prio": 17,
-   "top": [
-    {
-     "id": "tmwhk8jd90kx",
-     "d": "2026-11-13",
-     "a": 81
-    }
-   ]
-  },
-  {
-   "id": "p16",
-   "name": "Назар Р",
-   "active": true,
-   "phone": "+380 95 477 02 06",
-   "tg": "mononazar",
-   "prio": 18
-  },
-  {
-   "id": "p21",
-   "name": "Антон від Макса",
-   "active": false,
-   "prio": 19
-  },
-  {
-   "id": "p22",
-   "name": "Богдан",
-   "active": false,
-   "prio": 20
-  },
-  {
-   "id": "p11",
-   "name": "Бородатий",
-   "active": false,
-   "prio": 21
-  },
-  {
-   "id": "p24",
-   "name": "Назар брат",
-   "active": false,
-   "prio": 22
-  },
-  {
-   "id": "p23",
-   "name": "Олексій",
-   "active": false,
-   "prio": 23
-  },
-  {
-   "id": "p10",
-   "name": "Ярік",
-   "active": false,
-   "prio": 24
-  }
- ],
  "games": [
   {
    "id": "g20260116",
@@ -1153,6 +857,302 @@
    "ann": {
     "gather": "2026-11-26T12:01:22.681Z"
    }
+  }
+ ],
+ "players": [
+  {
+   "id": "p1",
+   "name": "Льоша",
+   "active": true,
+   "num": 8,
+   "pos": [
+    "dm",
+    "cb"
+   ],
+   "foot": "r",
+   "h": 180,
+   "bd": "1998-03-17",
+   "quote": "Головне не пропустити, а голи прийдуть",
+   "phone": "+380 95 189 34 73",
+   "tg": "Mit_O_17",
+   "prio": 1,
+   "top": [
+    {
+     "id": "tmwhg4nnf2uo",
+     "d": "2026-11-13",
+     "a": 81
+    }
+   ]
+  },
+  {
+   "id": "p2",
+   "name": "Тоха",
+   "active": true,
+   "phone": "+380 99 604 97 83",
+   "tg": "Kuzya1999",
+   "prio": 2,
+   "top": [
+    {
+     "id": "tmwhk8ck4co2",
+     "d": "2026-11-13",
+     "a": 81
+    }
+   ]
+  },
+  {
+   "id": "p3",
+   "name": "Коля",
+   "active": true,
+   "phone": "+380 68 050 34 35",
+   "tg": "tom_chikk",
+   "prio": 3,
+   "top": [
+    {
+     "id": "tmwqakm3uj8v",
+     "d": "2026-11-21",
+     "a": 81
+    }
+   ]
+  },
+  {
+   "id": "p8",
+   "name": "Назар",
+   "active": true,
+   "phone": "+380 50 140 65 31",
+   "tg": "nazar_pochaiv",
+   "prio": 4,
+   "top": [
+    {
+     "id": "tmwhk85u5ois",
+     "d": "2026-11-13",
+     "a": 81
+    },
+    {
+     "id": "tmwq4kwtc6zj",
+     "d": "2026-11-21",
+     "a": 81
+    }
+   ]
+  },
+  {
+   "id": "p4",
+   "name": "Веталь",
+   "active": true,
+   "phone": "+380 96 182 79 94",
+   "tg": "maks_v10",
+   "prio": 5
+  },
+  {
+   "id": "p5",
+   "name": "Демчук",
+   "active": true,
+   "phone": "+380 99 238 57 32",
+   "prio": 6
+  },
+  {
+   "id": "p6",
+   "name": "Макс",
+   "active": true,
+   "phone": "+380 99 511 38 88",
+   "tg": "mstrilec",
+   "prio": 7,
+   "top": [
+    {
+     "id": "tmwhk7qf9hp0",
+     "d": "2026-11-13",
+     "a": 81
+    },
+    {
+     "id": "tmwq4l0jwwct",
+     "d": "2026-11-21",
+     "a": 81
+    }
+   ]
+  },
+  {
+   "id": "p7",
+   "name": "Ден",
+   "active": true,
+   "phone": "+380 99 066 77 13",
+   "tg": "Dionisqa",
+   "prio": 8,
+   "top": [
+    {
+     "id": "tmwhk6rp0abi",
+     "d": "2026-11-13",
+     "a": 81
+    },
+    {
+     "id": "tmwq4t92kd9m",
+     "d": "2026-11-21",
+     "a": 81
+    }
+   ]
+  },
+  {
+   "id": "p9",
+   "name": "Ігор",
+   "active": true,
+   "phone": "+380 98 282 80 88",
+   "tg": "Igor_Stasyuk",
+   "prio": 9,
+   "top": [
+    {
+     "id": "tmwhk7j1pzg7",
+     "d": "2026-11-13",
+     "a": 81
+    },
+    {
+     "id": "tmwpc7k1f5oz",
+     "d": "2026-11-20",
+     "a": 81
+    }
+   ]
+  },
+  {
+   "id": "p19",
+   "name": "Стас",
+   "active": true,
+   "phone": "+380 50 911 15 34",
+   "prio": 10,
+   "top": [
+    {
+     "id": "tmwhk7yqt6nz",
+     "d": "2026-11-13",
+     "a": 81
+    },
+    {
+     "id": "tmwq4k8haubq",
+     "d": "2026-11-21",
+     "a": 81
+    }
+   ]
+  },
+  {
+   "id": "p14",
+   "name": "Влад",
+   "active": true,
+   "phone": "+380 95 420 65 60",
+   "tg": "vlad_shtefyuk",
+   "prio": 11,
+   "top": [
+    {
+     "id": "tmwq4l53mktt",
+     "d": "2026-11-21",
+     "a": 81
+    }
+   ]
+  },
+  {
+   "id": "p15",
+   "name": "Льошка",
+   "active": true,
+   "phone": "+380 97 669 12 04",
+   "tg": "X5_REVCHIK",
+   "prio": 12,
+   "top": [
+    {
+     "id": "tmwhk7betjh5",
+     "d": "2026-11-13",
+     "a": 200
+    }
+   ]
+  },
+  {
+   "id": "p12",
+   "name": "Дімон",
+   "active": true,
+   "phone": "+380 99 265 45 43",
+   "tg": "ttkachhhh",
+   "prio": 13,
+   "top": [
+    {
+     "id": "tmwhk73392k1",
+     "d": "2026-11-13",
+     "a": 240
+    }
+   ]
+  },
+  {
+   "id": "p13",
+   "name": "Саня Д",
+   "active": true,
+   "phone": "+380 98 918 44 24",
+   "tg": "doroshit_23",
+   "prio": 14
+  },
+  {
+   "id": "p17",
+   "name": "Олег",
+   "active": true,
+   "tg": "Deymaxpdr",
+   "prio": 15
+  },
+  {
+   "id": "p18",
+   "name": "Макс Д",
+   "active": true,
+   "tg": "DeyMaxX",
+   "prio": 16
+  },
+  {
+   "id": "p23",
+   "name": "Олексій",
+   "active": true,
+   "prio": 17
+  },
+  {
+   "id": "p20",
+   "name": "Ярік Б",
+   "active": true,
+   "phone": "+380 68 099 89 68",
+   "tg": "slav_chik_08",
+   "prio": 18,
+   "top": [
+    {
+     "id": "tmwhk8jd90kx",
+     "d": "2026-11-13",
+     "a": 81
+    }
+   ]
+  },
+  {
+   "id": "p16",
+   "name": "Назар Р",
+   "active": true,
+   "phone": "+380 95 477 02 06",
+   "tg": "mononazar",
+   "prio": 19
+  },
+  {
+   "id": "p21",
+   "name": "Антон від Макса",
+   "active": false,
+   "prio": 20
+  },
+  {
+   "id": "p22",
+   "name": "Богдан",
+   "active": false,
+   "prio": 21
+  },
+  {
+   "id": "p11",
+   "name": "Бородатий",
+   "active": false,
+   "prio": 22
+  },
+  {
+   "id": "p24",
+   "name": "Назар брат",
+   "active": false,
+   "prio": 23
+  },
+  {
+   "id": "p10",
+   "name": "Ярік",
+   "active": false,
+   "prio": 24
   }
  ],
  "settings": {
